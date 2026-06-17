@@ -1,4 +1,4 @@
-# Survey Assist Embed Core API
+# Survey Assist Embed Core
 
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![License](https://img.shields.io/github/license/ONSdigital/survey-assist-embed-core)
