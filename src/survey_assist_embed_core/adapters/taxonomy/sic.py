@@ -5,22 +5,20 @@ import os
 from os import PathLike
 from pathlib import Path
 
-import pandas as pd  # type: ignore[import-untyped]
-from industrial_classification.hierarchy.sic_hierarchy import (  # type: ignore[import-untyped]
-    SIC,
-    load_hierarchy,
-)
+import pandas as pd
+from industrial_classification.hierarchy.sic_hierarchy import SIC, load_hierarchy
+from pandas._typing import DtypeArg
 
 logger = logging.getLogger(__name__)
 
 type SICFileReference = str | PathLike[str] | tuple[str | PathLike[str], str]
 
-_SIC_INDEX_DTYPES = {
+_SIC_INDEX_DTYPES: DtypeArg = {
     "uk_sic_2007": "string",
     "activity": "string",
 }
 
-_SIC_STRUCTURE_DTYPES = {
+_SIC_STRUCTURE_DTYPES: DtypeArg = {
     "description": "string",
     "section": "string",
     "most_disaggregated_level": "string",
@@ -42,7 +40,7 @@ def _resolve_sic_file_reference(
 def _read_sic_table(
     file_reference: SICFileReference,
     *,
-    dtype: dict[str, str],
+    dtype: DtypeArg,
 ) -> pd.DataFrame:
     """Read a SIC source table from CSV or Excel while preserving key codes."""
     file_path, file_type_hint = _resolve_sic_file_reference(file_reference)
