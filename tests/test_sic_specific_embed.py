@@ -83,13 +83,12 @@ def test_load_embedding_handler_from_sic_index_files_builds_temp_csv(
     )
     fake_sic = FakeSicHierarchy(leaf_text)
     built_handler = SimpleNamespace()
-    captured_frame: pd.DataFrame | None = None
+    captured_frame: dict[str, pd.DataFrame] = {}
 
     def fake_embedding_handler(**kwargs: object) -> SimpleNamespace:
-        nonlocal captured_frame
         csv_path = kwargs["index_source_file"]
         assert isinstance(csv_path, str)
-        captured_frame = pd.read_csv(
+        captured_frame["value"] = pd.read_csv(
             csv_path,
             dtype={"code": "string", "text": "string", "label": "string"},
         )
@@ -118,9 +117,9 @@ def test_load_embedding_handler_from_sic_index_files_builds_temp_csv(
         sic_structure_file="sic-structure.xlsx",
     )
 
-    assert captured_frame is not None
-    assert captured_frame["code"].tolist() == ["01.11", "01/12"]
-    assert captured_frame["label"].tolist() == ["01110", "01120"]
+    assert "value" in captured_frame
+    assert captured_frame["value"]["code"].tolist() == ["01.11", "01/12"]
+    assert captured_frame["value"]["label"].tolist() == ["01110", "01120"]
 
     index_source_file = mock_handler_cls.call_args.kwargs["index_source_file"]
     assert isinstance(index_source_file, str)
