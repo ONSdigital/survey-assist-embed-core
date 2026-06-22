@@ -7,11 +7,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Protocol, cast
+from typing import cast
 
 import numpy as np
 from autocorrect import Speller
-from classifai.indexers import VectorStore, VectorStoreSearchInput
+from classifai.indexers import (
+    VectorStore,
+    VectorStoreSearchInput,
+    VectorStoreSearchOutput,
+)
 from classifai.vectorisers import HuggingFaceVectoriser
 
 from survey_assist_embed_core.adapters.storage import (
@@ -31,16 +35,6 @@ DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
 
 logger = logging.getLogger(__name__)
-
-
-class _SearchResultsWithToDicts(Protocol):  # pylint: disable=too-few-public-methods
-    def to_dicts(self) -> list[dict[str, object]]:
-        """Return rows as dictionaries."""
-
-
-class _SearchResultsWithToDict(Protocol):  # pylint: disable=too-few-public-methods
-    def to_dict(self, orient: str = "records") -> list[dict[str, object]]:
-        """Return rows as dictionaries."""
 
 
 class ChromaDBesqueHFVectoriser(HuggingFaceVectoriser):
@@ -210,12 +204,10 @@ class EmbeddingHandler:
         search_input = VectorStoreSearchInput({"id": ["q1"], "query": [query]})
 
         n_results = min(self.index_size, self.k_matches)
-        results = self.vector_store.search(search_input, n_results=n_results)
-
-        if hasattr(results, "to_dicts"):
-            rows = cast(_SearchResultsWithToDicts, results).to_dicts()
-        else:
-            rows = cast(_SearchResultsWithToDict, results).to_dict(orient="records")
+        results: VectorStoreSearchOutput = self.vector_store.search(
+            search_input, n_results=n_results
+        )
+        rows = results.to_dict(orient="records")
 
         return SearchIndexResponse(
             results=[

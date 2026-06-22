@@ -8,10 +8,12 @@ import logging
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from classifai.indexers import VectorStoreSearchOutput
 
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
 from survey_assist_embed_core.embed import EmbeddingHandler
@@ -25,25 +27,18 @@ EXPECTED_CONFIG_K_MATCHES = 5
 EXPECTED_CONFIG_INDEX_SIZE = 7
 
 
-class FakeSearchResults:  # pylint: disable=too-few-public-methods
-    """Minimal search result wrapper exposing ``to_dict``."""
-
-    def __init__(self, rows: list[dict[str, object]]):
-        self._rows = rows
-
-    def to_dict(self, orient: str = "records") -> list[dict[str, object]]:
-        assert orient == "records"
-        return self._rows
-
-
-class FakeSearchResultsWithToDicts:  # pylint: disable=too-few-public-methods
-    """Minimal search result wrapper exposing ``to_dicts``."""
-
-    def __init__(self, rows: list[dict[str, object]]):
-        self._rows = rows
-
-    def to_dicts(self) -> list[dict[str, object]]:
-        return self._rows
+def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput:
+    """Build a valid ClassifAI search output for tests."""
+    return VectorStoreSearchOutput.from_data(
+        {
+            "query_id": ["q1"] * len(rows),
+            "query_text": ["test query"] * len(rows),
+            "doc_label": [str(row["doc_label"]) for row in rows],
+            "doc_text": [str(row["doc_text"]) for row in rows],
+            "rank": list(range(1, len(rows) + 1)),
+            "score": [float(cast(float | int, row["score"])) for row in rows],
+        }
+    )
 
 
 @pytest.fixture
@@ -86,7 +81,7 @@ def embedding_handler_search(tmp_path: Path) -> EmbeddingHandler:
     ]
     fake_store = SimpleNamespace(
         num_vectors=EXPECTED_TOY_INDEX_SIZE,
-        search=MagicMock(return_value=FakeSearchResults(rows)),
+        search=MagicMock(return_value=make_search_output(rows)),
     )
     fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
@@ -164,11 +159,11 @@ def test_search_index(embedding_handler_search: EmbeddingHandler) -> None:
     assert response.results[0].distance == pytest.approx(0.01)
 
 
-def test_search_index_uses_to_dicts_when_available(tmp_path: Path) -> None:
+def test_search_index_uses_vector_store_search_output(tmp_path: Path) -> None:
     rows = [{"doc_text": "dog", "score": 0.9, "doc_label": "02"}]
     fake_store = SimpleNamespace(
         num_vectors=1,
-        search=MagicMock(return_value=FakeSearchResultsWithToDicts(rows)),
+        search=MagicMock(return_value=make_search_output(rows)),
     )
     fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
