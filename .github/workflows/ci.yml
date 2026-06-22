@@ -34,7 +34,7 @@
                   run: python -m pip install --upgrade pipx
 
                 - name: Install Poetry
-                  run: pipx install poetry==2.1.1
+                  run: pipx install poetry==2.4.1
 
                 - name: Add pipx to PATH
                   run: |
