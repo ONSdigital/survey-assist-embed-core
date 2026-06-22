@@ -27,6 +27,7 @@ class _FakeBlob:
         self.downloaded_to: str | None = None
 
     def exists(self):
+        """Report whether the fake blob exists."""
         return self._exists
 
     def download_to_filename(self, filename: str):
@@ -42,6 +43,7 @@ class _FakeBucket:  # pylint: disable=too-few-public-methods
         self._blob_map = blob_map
 
     def blob(self, name: str):
+        """Return the fake blob for a blob name."""
         return self._blob_map[name]
 
 
@@ -52,6 +54,7 @@ class _FakeStorageClient:  # pylint: disable=too-few-public-methods
         self._bucket_map = bucket_map
 
     def bucket(self, name: str):
+        """Return the fake bucket for a bucket name."""
         return self._bucket_map[name]
 
 

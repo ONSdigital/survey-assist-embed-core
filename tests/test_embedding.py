@@ -26,6 +26,8 @@ EXPECTED_CONFIG_INDEX_SIZE = 7
 
 
 class FakeSearchResults:  # pylint: disable=too-few-public-methods
+    """Minimal search result wrapper exposing ``to_dict``."""
+
     def __init__(self, rows: list[dict[str, object]]):
         self._rows = rows
 
@@ -35,6 +37,8 @@ class FakeSearchResults:  # pylint: disable=too-few-public-methods
 
 
 class FakeSearchResultsWithToDicts:  # pylint: disable=too-few-public-methods
+    """Minimal search result wrapper exposing ``to_dicts``."""
+
     def __init__(self, rows: list[dict[str, object]]):
         self._rows = rows
 

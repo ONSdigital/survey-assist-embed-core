@@ -11,10 +11,7 @@ from typing import Protocol, cast
 
 import numpy as np
 from autocorrect import Speller
-from classifai.indexers import (
-    VectorStore,
-    VectorStoreSearchInput,
-)
+from classifai.indexers import VectorStore, VectorStoreSearchInput
 from classifai.vectorisers import HuggingFaceVectoriser
 
 from survey_assist_embed_core.adapters.storage import (
@@ -36,12 +33,12 @@ DEFAULT_K_MATCHES = 20
 logger = logging.getLogger(__name__)
 
 
-class _SearchResultsWithToDicts(Protocol):
+class _SearchResultsWithToDicts(Protocol):  # pylint: disable=too-few-public-methods
     def to_dicts(self) -> list[dict[str, object]]:
         """Return rows as dictionaries."""
 
 
-class _SearchResultsWithToDict(Protocol):
+class _SearchResultsWithToDict(Protocol):  # pylint: disable=too-few-public-methods
     def to_dict(self, orient: str = "records") -> list[dict[str, object]]:
         """Return rows as dictionaries."""
 
