@@ -442,6 +442,55 @@ def test_build_vector_store_passes_none_metadata(tmp_path: Path) -> None:
     assert mock_vector_store.call_args.kwargs["meta_data"] is None
 
 
+def test_build_vector_store_creates_metadata_when_missing(tmp_path: Path) -> None:
+    db_dir = tmp_path / "vector_store"
+    db_dir.mkdir()
+
+    handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.db_dir = str(db_dir)
+    handler.embeddings = object()
+    handler.index_source_file = "some-file.csv"
+
+    built_store = SimpleNamespace(num_vectors=1)
+
+    with patch(
+        "survey_assist_embed_core.embed.embedding.VectorStore",
+        return_value=built_store,
+    ):
+        handler._build_vector_store()
+
+    metadata = json.loads((db_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["index_source_file"] == "some-file.csv"
+
+
+def test_build_vector_store_updates_existing_metadata(tmp_path: Path) -> None:
+    db_dir = tmp_path / "vector_store"
+    db_dir.mkdir()
+    (db_dir / "metadata.json").write_text(
+        json.dumps({"existing_key": "existing-value"}),
+        encoding="utf-8",
+    )
+
+    handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.db_dir = str(db_dir)
+    handler.embeddings = object()
+    handler.index_source_file = "some-file.csv"
+
+    built_store = SimpleNamespace(num_vectors=1)
+
+    with patch(
+        "survey_assist_embed_core.embed.embedding.VectorStore",
+        return_value=built_store,
+    ):
+        handler._build_vector_store()
+
+    metadata = json.loads((db_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata == {
+        "existing_key": "existing-value",
+        "index_source_file": "some-file.csv",
+    }
+
+
 def test_build_vector_store_uses_downloaded_gcs_source_file(tmp_path: Path) -> None:
     db_dir = tmp_path / "vector_store"
     db_dir.mkdir()
@@ -604,3 +653,41 @@ def test_chromadbesque_transform_list_passes_through() -> None:
 
     mock_super.assert_called_once_with(["hello", "world"])
     assert result.shape == (2, 2)
+
+
+def test_chromadbesque_embed_documents_returns_list_vectors() -> None:
+    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    fake_vec = np.array([[1.0, 0.0], [0.0, 1.0]])
+
+    with patch.object(inst, "transform", return_value=fake_vec) as mock_transform:
+        result = inst.embed_documents(["hello", "world"])
+
+    mock_transform.assert_called_once_with(["hello", "world"])
+    assert result == [[1.0, 0.0], [0.0, 1.0]]
+
+
+def test_chromadbesque_embed_query_returns_first_vector() -> None:
+    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    fake_vec = np.array([[0.25, 0.75]])
+
+    with patch.object(inst, "transform", return_value=fake_vec) as mock_transform:
+        result = inst.embed_query("hello")
+
+    mock_transform.assert_called_once_with(["hello"])
+    assert result == [0.25, 0.75]
+
+
+def test_chromadbesque_async_embed_helpers_delegate() -> None:
+    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+
+    with (
+        patch.object(inst, "embed_documents", return_value=[[1.0, 0.0]]) as mock_docs,
+        patch.object(inst, "embed_query", return_value=[0.25, 0.75]) as mock_query,
+    ):
+        documents = inst.aembed_documents(["hello"])
+        query = inst.aembed_query("world")
+
+    mock_docs.assert_called_once_with(["hello"])
+    mock_query.assert_called_once_with("world")
+    assert documents == [[1.0, 0.0]]
+    assert query == [0.25, 0.75]

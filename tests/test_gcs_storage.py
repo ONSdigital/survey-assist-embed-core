@@ -129,6 +129,36 @@ def test_download_vector_store_from_gcs_success() -> None:
 
 
 @pytest.mark.utils
+def test_download_vector_store_from_gcs_bucket_root_success() -> None:
+    """A bucket-root URI should download files without a prefix."""
+    metadata_blob = _FakeBlob(exists=True)
+    vectors_blob = _FakeBlob(exists=True)
+
+    fake_client = _FakeStorageClient(
+        {
+            "my-bucket": _FakeBucket(
+                {
+                    "metadata.json": metadata_blob,
+                    "vectors.parquet": vectors_blob,
+                }
+            )
+        }
+    )
+
+    with patch(
+        "survey_assist_embed_core.adapters.storage.gcs.Client",
+        return_value=fake_client,
+    ):
+        downloaded = download_vector_store_from_gcs("gs://my-bucket")
+
+    assert isinstance(downloaded, DownloadedVectorStore)
+    assert Path(downloaded.path, "metadata.json").exists()
+    assert Path(downloaded.path, "vectors.parquet").exists()
+
+    downloaded.cleanup()
+
+
+@pytest.mark.utils
 def test_download_vector_store_from_gcs_missing_files() -> None:
     """The helper should report missing vector store files clearly."""
     metadata_blob = _FakeBlob(exists=False)
@@ -151,6 +181,33 @@ def test_download_vector_store_from_gcs_missing_files() -> None:
             return_value=fake_client,
         ),
         pytest.raises(FileNotFoundError, match=r"metadata\.json"),
+    ):
+        download_vector_store_from_gcs("gs://my-bucket/prefix")
+
+
+@pytest.mark.utils
+def test_download_vector_store_from_gcs_missing_vectors_file() -> None:
+    """The helper should report a missing vectors file clearly."""
+    metadata_blob = _FakeBlob(exists=True)
+    vectors_blob = _FakeBlob(exists=False)
+
+    fake_client = _FakeStorageClient(
+        {
+            "my-bucket": _FakeBucket(
+                {
+                    "prefix/metadata.json": metadata_blob,
+                    "prefix/vectors.parquet": vectors_blob,
+                }
+            )
+        }
+    )
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.storage.gcs.Client",
+            return_value=fake_client,
+        ),
+        pytest.raises(FileNotFoundError, match=r"vectors\.parquet"),
     ):
         download_vector_store_from_gcs("gs://my-bucket/prefix")
 

@@ -7,6 +7,7 @@ from survey_assist_embed_core.models import (
     SearchIndexItem,
     SearchIndexResponse,
 )
+from survey_assist_embed_core.models.status import MAX_K_MATCHES
 
 READY_INDEX_SIZE = 100
 VALID_DB_DIR = "vector-store-dir"
@@ -74,4 +75,30 @@ def test_embedding_status_rejects_unknown_db_dir() -> None:
             index_source_file="source.csv",
             status="ready",
             index_size=5,
+        )
+
+
+def test_embedding_status_rejects_zero_k_matches() -> None:
+    """The retrieval config should reject k_matches below one."""
+    with pytest.raises(ValueError, match="k_matches must be at least 1"):
+        EmbeddingStatus(
+            embedding_model_name="all-MiniLM-L6-v2",
+            db_dir=VALID_DB_DIR,
+            k_matches=0,
+            index_source_file="source.csv",
+            status="loading",
+            index_size=0,
+        )
+
+
+def test_embedding_status_rejects_k_matches_above_maximum() -> None:
+    """The retrieval config should reject k_matches above the supported bound."""
+    with pytest.raises(ValueError, match=rf"k_matches must be at most {MAX_K_MATCHES}"):
+        EmbeddingStatus(
+            embedding_model_name="all-MiniLM-L6-v2",
+            db_dir=VALID_DB_DIR,
+            k_matches=MAX_K_MATCHES + 1,
+            index_source_file="source.csv",
+            status="loading",
+            index_size=0,
         )
