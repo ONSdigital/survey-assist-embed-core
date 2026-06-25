@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from survey_assist_embed_core.adapters.classifai import ClassifaiArtifactStore
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
 from survey_assist_embed_core.embed import EmbeddingHandler
 from survey_assist_embed_core.embed.embedding import ChromaDBesqueHFVectoriser
@@ -299,6 +300,7 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     handler.embeddings = object()
     handler._downloaded_vector_store = None
     handler._backend = SimpleNamespace(load=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     fake_store = SimpleNamespace(num_vectors=42)
     handler._backend.load.return_value = fake_store
@@ -328,13 +330,47 @@ def test_load_existing_vector_store_local_missing_files(tmp_path: Path) -> None:
     handler.embeddings = object()
     handler._downloaded_vector_store = None
     handler._backend = SimpleNamespace(load=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     with (
         patch(
             "survey_assist_embed_core.embed.embedding.is_gcs_path",
             return_value=False,
         ),
-        pytest.raises(FileNotFoundError, match="No existing vector store found"),
+        pytest.raises(FileNotFoundError, match="No persisted vector store found"),
+    ):
+        handler._load_existing_vector_store()
+
+
+def test_load_existing_vector_store_error_uses_artifact_store_names(
+    tmp_path: Path,
+) -> None:
+    db_dir = tmp_path / "vector_store"
+    db_dir.mkdir()
+
+    handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.db_dir = str(db_dir)
+    handler.embeddings = object()
+    handler._downloaded_vector_store = None
+    handler._backend = SimpleNamespace(load=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore(
+        metadata_file_name="store-metadata.json",
+        vectors_file_name="store-vectors.parquet",
+    )
+
+    with (
+        patch(
+            "survey_assist_embed_core.embed.embedding.is_gcs_path",
+            return_value=False,
+        ),
+        pytest.raises(
+            FileNotFoundError,
+            match=(
+                r"No persisted vector store found .*"
+                r"store-metadata\.json, store-vectors\.parquet.*"
+                r"Or provide a valid index source file\."
+            ),
+        ),
     ):
         handler._load_existing_vector_store()
 
@@ -345,6 +381,7 @@ def test_load_existing_vector_store_gcs() -> None:
     handler.embeddings = object()
     handler._downloaded_vector_store = None
     handler._backend = SimpleNamespace(load=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     fake_store = SimpleNamespace(num_vectors=55)
     handler._backend.load.return_value = fake_store
@@ -384,13 +421,14 @@ def test_load_existing_vector_store_raises_when_dir_missing(tmp_path: Path) -> N
     handler.embeddings = object()
     handler._downloaded_vector_store = None
     handler._backend = SimpleNamespace(load=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     with (
         patch(
             "survey_assist_embed_core.embed.embedding.is_gcs_path",
             return_value=False,
         ),
-        pytest.raises(FileNotFoundError, match="No existing vector store found"),
+        pytest.raises(FileNotFoundError, match="No persisted vector store found"),
     ):
         handler._load_existing_vector_store()
 
@@ -399,6 +437,7 @@ def test_build_vector_store_raises_when_db_dir_missing() -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
     handler.db_dir = None
     handler._backend = SimpleNamespace(build=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     with pytest.raises(ValueError, match="db_dir must be provided"):
         handler._build_vector_store()
@@ -412,6 +451,7 @@ def test_build_vector_store_calls_backend_with_resolved_inputs(tmp_path: Path) -
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     built_store = SimpleNamespace(num_vectors=1)
     handler._backend.build.return_value = built_store
@@ -434,6 +474,7 @@ def test_build_vector_store_creates_metadata_when_missing(tmp_path: Path) -> Non
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     built_store = SimpleNamespace(num_vectors=1)
     handler._backend.build.return_value = built_store
@@ -457,6 +498,7 @@ def test_build_vector_store_updates_existing_metadata(tmp_path: Path) -> None:
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     built_store = SimpleNamespace(num_vectors=1)
     handler._backend.build.return_value = built_store
@@ -481,6 +523,7 @@ def test_build_vector_store_uses_downloaded_gcs_source_file(tmp_path: Path) -> N
     handler.embeddings = object()
     handler.index_source_file = "gs://my-bucket/data.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     downloaded = DownloadedVectorStore(
         path=str(downloaded_csv),
@@ -517,6 +560,7 @@ def test_build_vector_store_logs_warning_when_parquet_exists(
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
 
     built_store = SimpleNamespace(num_vectors=1)
     handler._backend.build.return_value = built_store

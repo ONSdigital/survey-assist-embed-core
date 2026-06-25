@@ -1,4 +1,4 @@
-"""Embedding and retrieval helpers backed by a ClassifAI vector store."""
+"""Embedding and retrieval helpers backed by pluggable vector-store adapters."""
 
 # pylint: disable=too-many-instance-attributes
 
@@ -9,14 +9,9 @@ import numpy as np
 from autocorrect import Speller
 from classifai.vectorisers import HuggingFaceVectoriser
 
-# Next PR: Refactor to remove dependency on ClassifAI and GCS and allow
-# for pluggable vector store and storage backends.
 from survey_assist_embed_core.adapters.classifai import (
+    ClassifaiArtifactStore,
     ClassifaiVectorBackend,
-    has_persisted_vector_store,
-    has_persisted_vectors_file,
-    read_index_source_file,
-    write_index_source_file,
 )
 from survey_assist_embed_core.adapters.storage import (
     DownloadedVectorStore,
@@ -29,7 +24,7 @@ from survey_assist_embed_core.models import (
     SearchIndexItem,
     SearchIndexResponse,
 )
-from survey_assist_embed_core.ports import VectorBackend, VectorIndex
+from survey_assist_embed_core.ports import ArtifactStore, VectorBackend, VectorIndex
 
 DEFAULT_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 DEFAULT_DB_DIR = "vector_store"
@@ -75,13 +70,14 @@ class ChromaDBesqueHFVectoriser(HuggingFaceVectoriser):
 class EmbeddingHandler:
     """Handle embedding operations for a vector-store backend."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - constructor wires explicit handler dependencies.
         self,
         embedding_model_name: str = DEFAULT_EMBEDDING_MODEL_NAME,
         db_dir: str = DEFAULT_DB_DIR,
         k_matches: int = DEFAULT_K_MATCHES,
         index_source_file: str | None = None,
         backend: VectorBackend | None = None,
+        artifact_store: ArtifactStore | None = None,
     ):
         """Initialise the handler for an existing or newly built vector store."""
         self.embedding_model_name = embedding_model_name
@@ -89,6 +85,7 @@ class EmbeddingHandler:
         self.db_dir = db_dir
         self.index_source_file = index_source_file
         self._backend = backend or ClassifaiVectorBackend()
+        self._artifact_store = artifact_store or ClassifaiArtifactStore()
 
         self.embeddings: HuggingFaceVectoriser = ChromaDBesqueHFVectoriser(
             model_name=f"sentence-transformers/{embedding_model_name}"
@@ -116,19 +113,19 @@ class EmbeddingHandler:
 
     def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
         """Load an existing vector store from a local folder or a GCS URI."""
-        logger.info("Loading existing ClassifAI vector store from %s", self.db_dir)
+        logger.info("Loading existing vector store from %s", self.db_dir)
         db_dir = self.db_dir
 
         if is_gcs_path(db_dir):
             self._downloaded_vector_store = download_vector_store_from_gcs(db_dir)
             db_dir = self._downloaded_vector_store.temp_dir.name
 
-        if not has_persisted_vector_store(db_dir):
+        try:
+            self._artifact_store.ensure_persisted_vector_store(folder_path=db_dir)
+        except FileNotFoundError as exc:
             raise FileNotFoundError(
-                f"No existing vector store found in {self.db_dir}. "
-                "Please ensure the directory contains metadata.json and vectors.parquet, "
-                "or provide a valid index source file."
-            )
+                f"{exc} Or provide a valid index source file."
+            ) from exc
 
         vector_store = self._backend.load(
             folder_path=db_dir,
@@ -136,11 +133,13 @@ class EmbeddingHandler:
         )
 
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
-        index_source_file = read_index_source_file(db_dir)
+        index_source_file = self._artifact_store.read_index_source_file(
+            folder_path=db_dir
+        )
         return vector_store, index_source_file
 
     def _build_vector_store(self) -> VectorIndex:
-        """Build a ClassifAI vector store from a CSV source file."""
+        """Build a vector store from a CSV source file."""
         if not self.db_dir:
             raise ValueError("db_dir must be provided.")
 
@@ -151,7 +150,7 @@ class EmbeddingHandler:
             index_source_file,
         )
 
-        if has_persisted_vectors_file(self.db_dir):
+        if self._artifact_store.has_persisted_vectors_file(folder_path=self.db_dir):
             logger.warning(
                 "Existing vector store files found in %s. They will be overwritten.",
                 self.db_dir,
@@ -167,7 +166,10 @@ class EmbeddingHandler:
             output_dir=self.db_dir,
         )
 
-        write_index_source_file(self.db_dir, self.index_source_file)
+        self._artifact_store.write_index_source_file(
+            folder_path=self.db_dir,
+            index_source_file=self.index_source_file,
+        )
 
         logger.info(
             "Vector store built successfully in %s with data from %s.",

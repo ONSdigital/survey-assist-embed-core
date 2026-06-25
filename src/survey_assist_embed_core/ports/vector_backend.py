@@ -1,7 +1,5 @@
 """Ports for vector-store backends."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any, Protocol
 
