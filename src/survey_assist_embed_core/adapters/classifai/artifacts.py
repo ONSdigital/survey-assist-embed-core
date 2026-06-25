@@ -1,7 +1,5 @@
 """Helpers for the persisted ClassifAI vector-store layout."""
 
-from __future__ import annotations
-
 import json
 import os
 

@@ -1,7 +1,5 @@
 """ClassifAI implementation of the vector backend port."""
 
-from __future__ import annotations
-
 from typing import Any, cast
 
 from classifai.indexers import (
