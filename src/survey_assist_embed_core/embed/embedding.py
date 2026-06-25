@@ -11,7 +11,7 @@ import numpy as np
 from autocorrect import Speller
 from classifai.vectorisers import HuggingFaceVectoriser
 
-# TODO: Refactor to remove dependency on ClassifAI and GCS and allow
+# Next PR: Refactor to remove dependency on ClassifAI and GCS and allow
 # for pluggable vector store and storage backends.
 from survey_assist_embed_core.adapters.classifai import (
     ClassifaiVectorBackend,
