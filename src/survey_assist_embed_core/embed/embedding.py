@@ -4,16 +4,22 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 from typing import cast
 
 import numpy as np
 from autocorrect import Speller
 from classifai.vectorisers import HuggingFaceVectoriser
 
-from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
+# TODO: Refactor to remove dependency on ClassifAI and GCS and allow
+# for pluggable vector store and storage backends.
+from survey_assist_embed_core.adapters.classifai import (
+    ClassifaiVectorBackend,
+    has_persisted_vector_store,
+    has_persisted_vectors_file,
+    read_index_source_file,
+    write_index_source_file,
+)
 from survey_assist_embed_core.adapters.storage import (
     DownloadedVectorStore,
     download_one_file_from_gcs,
@@ -119,16 +125,7 @@ class EmbeddingHandler:
             self._downloaded_vector_store = download_vector_store_from_gcs(db_dir)
             db_dir = self._downloaded_vector_store.temp_dir.name
 
-        metadata_path = os.path.join(db_dir, "metadata.json")
-        vectors_path = os.path.join(db_dir, "vectors.parquet")
-
-        has_existing_store = (
-            os.path.isdir(db_dir)
-            and os.path.exists(metadata_path)
-            and os.path.exists(vectors_path)
-        )
-
-        if not has_existing_store:
+        if not has_persisted_vector_store(db_dir):
             raise FileNotFoundError(
                 f"No existing vector store found in {self.db_dir}. "
                 "Please ensure the directory contains metadata.json and vectors.parquet, "
@@ -141,9 +138,7 @@ class EmbeddingHandler:
         )
 
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
-        with open(metadata_path, encoding="utf-8") as file_obj:
-            metadata = json.load(file_obj)
-        index_source_file = metadata.get("index_source_file", None)
+        index_source_file = read_index_source_file(db_dir)
         return vector_store, index_source_file
 
     def _build_vector_store(self) -> VectorIndex:
@@ -158,7 +153,7 @@ class EmbeddingHandler:
             index_source_file,
         )
 
-        if os.path.exists(os.path.join(self.db_dir, "vectors.parquet")):
+        if has_persisted_vectors_file(self.db_dir):
             logger.warning(
                 "Existing vector store files found in %s. They will be overwritten.",
                 self.db_dir,
@@ -174,15 +169,7 @@ class EmbeddingHandler:
             output_dir=self.db_dir,
         )
 
-        metadata_path = os.path.join(self.db_dir, "metadata.json")
-        if os.path.exists(metadata_path):
-            with open(metadata_path, encoding="utf-8") as file_obj:
-                metadata = json.load(file_obj)
-        else:
-            metadata = {}
-        metadata["index_source_file"] = str(self.index_source_file)
-        with open(metadata_path, "w", encoding="utf-8") as file_obj:
-            json.dump(metadata, file_obj)
+        write_index_source_file(self.db_dir, self.index_source_file)
 
         logger.info(
             "Vector store built successfully in %s with data from %s.",
