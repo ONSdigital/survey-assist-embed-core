@@ -8,12 +8,10 @@ import logging
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from classifai.indexers import VectorStoreSearchOutput
 
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
 from survey_assist_embed_core.embed import EmbeddingHandler
@@ -25,20 +23,6 @@ EXPECTED_MULTI_RESULTS = 4
 EXPECTED_TOP_DISTANCE = 0.1
 EXPECTED_CONFIG_K_MATCHES = 5
 EXPECTED_CONFIG_INDEX_SIZE = 7
-
-
-def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput:
-    """Build a valid ClassifAI search output for tests."""
-    return VectorStoreSearchOutput.from_data(
-        {
-            "query_id": ["q1"] * len(rows),
-            "query_text": ["test query"] * len(rows),
-            "doc_label": [str(row["doc_label"]) for row in rows],
-            "doc_text": [str(row["doc_text"]) for row in rows],
-            "rank": list(range(1, len(rows) + 1)),
-            "score": [float(cast(float | int, row["score"])) for row in rows],
-        }
-    )
 
 
 @pytest.fixture
@@ -81,7 +65,7 @@ def embedding_handler_search(tmp_path: Path) -> EmbeddingHandler:
     ]
     fake_store = SimpleNamespace(
         num_vectors=EXPECTED_TOY_INDEX_SIZE,
-        search=MagicMock(return_value=make_search_output(rows)),
+        search=MagicMock(return_value=rows),
     )
     fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
@@ -159,11 +143,11 @@ def test_search_index(embedding_handler_search: EmbeddingHandler) -> None:
     assert response.results[0].distance == pytest.approx(0.01)
 
 
-def test_search_index_uses_vector_store_search_output(tmp_path: Path) -> None:
+def test_search_index_uses_backend_search_rows(tmp_path: Path) -> None:
     rows = [{"doc_text": "dog", "score": 0.9, "doc_label": "02"}]
     fake_store = SimpleNamespace(
         num_vectors=1,
-        search=MagicMock(return_value=make_search_output(rows)),
+        search=MagicMock(return_value=rows),
     )
     fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
@@ -314,26 +298,23 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler._downloaded_vector_store = None
+    handler._backend = SimpleNamespace(load=MagicMock())
 
     fake_store = SimpleNamespace(num_vectors=42)
+    handler._backend.load.return_value = fake_store
 
     with (
         patch(
             "survey_assist_embed_core.embed.embedding.is_gcs_path",
             return_value=False,
         ),
-        patch(
-            "survey_assist_embed_core.embed.embedding.VectorStore.from_filespace",
-            return_value=fake_store,
-        ) as mock_from_filespace,
     ):
         result = handler._load_existing_vector_store()
 
     assert result == (fake_store, "source.csv")
-    mock_from_filespace.assert_called_once_with(
+    handler._backend.load.assert_called_once_with(
         folder_path=str(db_dir),
         vectoriser=handler.embeddings,
-        hooks=None,
     )
 
 
@@ -346,6 +327,7 @@ def test_load_existing_vector_store_local_missing_files(tmp_path: Path) -> None:
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler._downloaded_vector_store = None
+    handler._backend = SimpleNamespace(load=MagicMock())
 
     with (
         patch(
@@ -362,8 +344,10 @@ def test_load_existing_vector_store_gcs() -> None:
     handler.db_dir = "gs://my-bucket/prefix"
     handler.embeddings = object()
     handler._downloaded_vector_store = None
+    handler._backend = SimpleNamespace(load=MagicMock())
 
     fake_store = SimpleNamespace(num_vectors=55)
+    handler._backend.load.return_value = fake_store
 
     with tempfile.TemporaryDirectory() as temp_dir:
         Path(temp_dir, "metadata.json").write_text("{}", encoding="utf-8")
@@ -382,20 +366,15 @@ def test_load_existing_vector_store_gcs() -> None:
                 "survey_assist_embed_core.embed.embedding.download_vector_store_from_gcs",
                 return_value=downloaded,
             ) as mock_download,
-            patch(
-                "survey_assist_embed_core.embed.embedding.VectorStore.from_filespace",
-                return_value=fake_store,
-            ) as mock_from_filespace,
         ):
             result = handler._load_existing_vector_store()
 
     assert result == (fake_store, None)
     assert handler._downloaded_vector_store is downloaded
     mock_download.assert_called_once_with("gs://my-bucket/prefix")
-    mock_from_filespace.assert_called_once_with(
+    handler._backend.load.assert_called_once_with(
         folder_path=downloaded.temp_dir.name,
         vectoriser=handler.embeddings,
-        hooks=None,
     )
 
 
@@ -404,6 +383,7 @@ def test_load_existing_vector_store_raises_when_dir_missing(tmp_path: Path) -> N
     handler.db_dir = str(tmp_path / "nonexistent")
     handler.embeddings = object()
     handler._downloaded_vector_store = None
+    handler._backend = SimpleNamespace(load=MagicMock())
 
     with (
         patch(
@@ -418,28 +398,31 @@ def test_load_existing_vector_store_raises_when_dir_missing(tmp_path: Path) -> N
 def test_build_vector_store_raises_when_db_dir_missing() -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
     handler.db_dir = None
+    handler._backend = SimpleNamespace(build=MagicMock())
 
     with pytest.raises(ValueError, match="db_dir must be provided"):
         handler._build_vector_store()
 
 
-def test_build_vector_store_passes_none_metadata(tmp_path: Path) -> None:
+def test_build_vector_store_calls_backend_with_resolved_inputs(tmp_path: Path) -> None:
     db_dir = tmp_path / "vector_store"
     db_dir.mkdir()
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
+    handler._backend = SimpleNamespace(build=MagicMock())
 
     built_store = SimpleNamespace(num_vectors=1)
+    handler._backend.build.return_value = built_store
 
-    with patch(
-        "survey_assist_embed_core.embed.embedding.VectorStore",
-        return_value=built_store,
-    ) as mock_vector_store:
-        handler._build_vector_store()
+    handler._build_vector_store()
 
-    assert mock_vector_store.call_args.kwargs["meta_data"] is None
+    handler._backend.build.assert_called_once_with(
+        file_name="some-file.csv",
+        vectoriser=handler.embeddings,
+        output_dir=str(db_dir),
+    )
 
 
 def test_build_vector_store_creates_metadata_when_missing(tmp_path: Path) -> None:
@@ -450,14 +433,12 @@ def test_build_vector_store_creates_metadata_when_missing(tmp_path: Path) -> Non
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
+    handler._backend = SimpleNamespace(build=MagicMock())
 
     built_store = SimpleNamespace(num_vectors=1)
+    handler._backend.build.return_value = built_store
 
-    with patch(
-        "survey_assist_embed_core.embed.embedding.VectorStore",
-        return_value=built_store,
-    ):
-        handler._build_vector_store()
+    handler._build_vector_store()
 
     metadata = json.loads((db_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["index_source_file"] == "some-file.csv"
@@ -475,14 +456,12 @@ def test_build_vector_store_updates_existing_metadata(tmp_path: Path) -> None:
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
+    handler._backend = SimpleNamespace(build=MagicMock())
 
     built_store = SimpleNamespace(num_vectors=1)
+    handler._backend.build.return_value = built_store
 
-    with patch(
-        "survey_assist_embed_core.embed.embedding.VectorStore",
-        return_value=built_store,
-    ):
-        handler._build_vector_store()
+    handler._build_vector_store()
 
     metadata = json.loads((db_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata == {
@@ -501,12 +480,14 @@ def test_build_vector_store_uses_downloaded_gcs_source_file(tmp_path: Path) -> N
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler.index_source_file = "gs://my-bucket/data.csv"
+    handler._backend = SimpleNamespace(build=MagicMock())
 
     downloaded = DownloadedVectorStore(
         path=str(downloaded_csv),
         temp_dir=SimpleNamespace(name=str(tmp_path)),
     )
     built_store = SimpleNamespace(num_vectors=1)
+    handler._backend.build.return_value = built_store
 
     with (
         patch(
@@ -517,15 +498,11 @@ def test_build_vector_store_uses_downloaded_gcs_source_file(tmp_path: Path) -> N
             "survey_assist_embed_core.embed.embedding.download_one_file_from_gcs",
             return_value=downloaded,
         ) as mock_download,
-        patch(
-            "survey_assist_embed_core.embed.embedding.VectorStore",
-            return_value=built_store,
-        ) as mock_vector_store,
     ):
         handler._build_vector_store()
 
     mock_download.assert_called_once_with("gs://my-bucket/data.csv")
-    assert mock_vector_store.call_args.kwargs["file_name"] == str(downloaded_csv)
+    assert handler._backend.build.call_args.kwargs["file_name"] == str(downloaded_csv)
 
 
 def test_build_vector_store_logs_warning_when_parquet_exists(
@@ -539,17 +516,13 @@ def test_build_vector_store_logs_warning_when_parquet_exists(
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
+    handler._backend = SimpleNamespace(build=MagicMock())
 
     built_store = SimpleNamespace(num_vectors=1)
+    handler._backend.build.return_value = built_store
 
-    with (
-        caplog.at_level(
-            logging.WARNING, logger="survey_assist_embed_core.embed.embedding"
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding.VectorStore",
-            return_value=built_store,
-        ),
+    with caplog.at_level(
+        logging.WARNING, logger="survey_assist_embed_core.embed.embedding"
     ):
         handler._build_vector_store()
 

@@ -11,13 +11,9 @@ from typing import cast
 
 import numpy as np
 from autocorrect import Speller
-from classifai.indexers import (
-    VectorStore,
-    VectorStoreSearchInput,
-    VectorStoreSearchOutput,
-)
 from classifai.vectorisers import HuggingFaceVectoriser
 
+from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
 from survey_assist_embed_core.adapters.storage import (
     DownloadedVectorStore,
     download_one_file_from_gcs,
@@ -29,6 +25,7 @@ from survey_assist_embed_core.models import (
     SearchIndexItem,
     SearchIndexResponse,
 )
+from survey_assist_embed_core.ports import VectorBackend, VectorIndex
 
 DEFAULT_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 DEFAULT_DB_DIR = "vector_store"
@@ -72,7 +69,7 @@ class ChromaDBesqueHFVectoriser(HuggingFaceVectoriser):
 
 
 class EmbeddingHandler:
-    """Handle embedding operations for a ClassifAI vector store."""
+    """Handle embedding operations for a vector-store backend."""
 
     def __init__(
         self,
@@ -80,12 +77,14 @@ class EmbeddingHandler:
         db_dir: str = DEFAULT_DB_DIR,
         k_matches: int = DEFAULT_K_MATCHES,
         index_source_file: str | None = None,
+        backend: VectorBackend | None = None,
     ):
         """Initialise the handler for an existing or newly built vector store."""
         self.embedding_model_name = embedding_model_name
         self.k_matches = k_matches
         self.db_dir = db_dir
         self.index_source_file = index_source_file
+        self._backend = backend or ClassifaiVectorBackend()
 
         self.embeddings: HuggingFaceVectoriser = ChromaDBesqueHFVectoriser(
             model_name=f"sentence-transformers/{embedding_model_name}"
@@ -95,7 +94,7 @@ class EmbeddingHandler:
         self.spell = Speller()
 
         self._downloaded_vector_store: DownloadedVectorStore | None = None
-        self.vector_store: VectorStore
+        self.vector_store: VectorIndex
         if not self.index_source_file:
             self.vector_store, self.index_source_file = (
                 self._load_existing_vector_store()
@@ -111,7 +110,7 @@ class EmbeddingHandler:
             "EmbeddingHandler initialised with config: %s", self.get_embed_config()
         )
 
-    def _load_existing_vector_store(self) -> tuple[VectorStore, str | None]:
+    def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
         """Load an existing vector store from a local folder or a GCS URI."""
         logger.info("Loading existing ClassifAI vector store from %s", self.db_dir)
         db_dir = self.db_dir
@@ -136,10 +135,9 @@ class EmbeddingHandler:
                 "or provide a valid index source file."
             )
 
-        vector_store = VectorStore.from_filespace(
+        vector_store = self._backend.load(
             folder_path=db_dir,
             vectoriser=self.embeddings,
-            hooks=None,
         )
 
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
@@ -148,7 +146,7 @@ class EmbeddingHandler:
         index_source_file = metadata.get("index_source_file", None)
         return vector_store, index_source_file
 
-    def _build_vector_store(self) -> VectorStore:
+    def _build_vector_store(self) -> VectorIndex:
         """Build a ClassifAI vector store from a CSV source file."""
         if not self.db_dir:
             raise ValueError("db_dir must be provided.")
@@ -170,15 +168,10 @@ class EmbeddingHandler:
             downloaded_file = download_one_file_from_gcs(index_source_file)
             index_source_file = downloaded_file.path
 
-        vector_store = VectorStore(
+        vector_store = self._backend.build(
             file_name=index_source_file,
-            data_type="csv",
             vectoriser=self.embeddings,
-            batch_size=8,
-            meta_data=None,
             output_dir=self.db_dir,
-            overwrite=True,
-            hooks=None,
         )
 
         metadata_path = os.path.join(self.db_dir, "metadata.json")
@@ -201,13 +194,8 @@ class EmbeddingHandler:
 
     def search_index(self, query: str) -> SearchIndexResponse:
         """Return the nearest index entries for a query string."""
-        search_input = VectorStoreSearchInput({"id": ["q1"], "query": [query]})
-
         n_results = min(self.index_size, self.k_matches)
-        results: VectorStoreSearchOutput = self.vector_store.search(
-            search_input, n_results=n_results
-        )
-        rows = results.to_dict(orient="records")
+        rows = self.vector_store.search(query, limit=n_results)
 
         return SearchIndexResponse(
             results=[
