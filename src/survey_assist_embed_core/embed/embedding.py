@@ -85,9 +85,11 @@ class EmbeddingHandler:
         self.k_matches = k_matches
         self.db_dir = db_dir
         self.index_source_file = index_source_file
-        self._backend = backend or ClassifaiVectorBackend()
-        self._artifact_store = artifact_store or ClassifaiArtifactStore()
-        self._storage = storage or LocalGcsStorage()
+        self._backend = backend if backend is not None else ClassifaiVectorBackend()
+        self._artifact_store = (
+            artifact_store if artifact_store is not None else ClassifaiArtifactStore()
+        )
+        self._storage = storage if storage is not None else LocalGcsStorage()
 
         self.embeddings: HuggingFaceVectoriser = ChromaDBesqueHFVectoriser(
             model_name=f"sentence-transformers/{embedding_model_name}"

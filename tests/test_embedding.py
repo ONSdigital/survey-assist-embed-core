@@ -136,6 +136,43 @@ def test_embedding_handler_init_sets_index_size(tmp_path: Path) -> None:
     assert handler.index_size == EXPECTED_TOY_INDEX_SIZE
 
 
+def test_embedding_handler_init_keeps_falsey_explicit_dependencies(
+    tmp_path: Path,
+) -> None:
+    class _FalseyDependency:
+        def __bool__(self) -> bool:
+            return False
+
+    built_store = SimpleNamespace(num_vectors=EXPECTED_TOY_INDEX_SIZE)
+    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
+    backend = _FalseyDependency()
+    artifact_store = _FalseyDependency()
+    storage = _FalseyDependency()
+
+    with (
+        patch(
+            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
+            return_value=fake_embeddings,
+        ),
+        patch(
+            "survey_assist_embed_core.embed.embedding."
+            "EmbeddingHandler._load_existing_vector_store",
+            return_value=(built_store, "mock-source.csv"),
+        ),
+    ):
+        handler = EmbeddingHandler(
+            embedding_model_name="other",
+            db_dir=str(tmp_path / "vector_store"),
+            backend=backend,
+            artifact_store=artifact_store,
+            storage=storage,
+        )
+
+    assert handler._backend is backend
+    assert handler._artifact_store is artifact_store
+    assert handler._storage is storage
+
+
 def test_search_index(embedding_handler_search: EmbeddingHandler) -> None:
     response = embedding_handler_search.search_index("mens best friend")
 
