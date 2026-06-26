@@ -20,10 +20,8 @@ class VectorIndex(Protocol):
 class VectorBackend(Protocol):
     """Protocol for build/load operations against a vector backend."""
 
-    def load(self, *, folder_path: str, embedding_model_name: str) -> VectorIndex:
+    def load(self, *, folder_path: str) -> VectorIndex:
         """Load a vector index from a persisted folder."""
 
-    def build(
-        self, *, file_name: str, embedding_model_name: str, output_dir: str
-    ) -> VectorIndex:
+    def build(self, *, file_name: str, output_dir: str) -> VectorIndex:
         """Build a vector index from a prepared source file."""

@@ -32,7 +32,7 @@ def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput
 
 
 def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
-    backend = ClassifaiVectorBackend()
+    backend = ClassifaiVectorBackend(embedding_model_name="other")
     vectoriser = object()
     folder_path = str(tmp_path / "vector_store")
     fake_store = SimpleNamespace(
@@ -52,10 +52,10 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
             return_value=fake_store,
         ) as mock_from_filespace,
     ):
-        index = backend.load(folder_path=folder_path, embedding_model_name="other")
+        index = backend.load(folder_path=folder_path)
 
     assert index.num_vectors == EXPECTED_LOADED_VECTOR_COUNT
-    mock_build_vectoriser.assert_called_once_with(embedding_model_name="other")
+    mock_build_vectoriser.assert_called_once_with()
     mock_from_filespace.assert_called_once_with(
         folder_path=folder_path,
         vectoriser=vectoriser,
@@ -64,7 +64,7 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
 
 
 def test_classifai_vector_backend_build_uses_expected_args() -> None:
-    backend = ClassifaiVectorBackend()
+    backend = ClassifaiVectorBackend(embedding_model_name="other")
     vectoriser = object()
     fake_store = SimpleNamespace(
         num_vectors=EXPECTED_BUILT_VECTOR_COUNT,
@@ -84,12 +84,11 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
     ):
         index = backend.build(
             file_name="source.csv",
-            embedding_model_name="other",
             output_dir="vector_store",
         )
 
     assert index.num_vectors == EXPECTED_BUILT_VECTOR_COUNT
-    mock_build_vectoriser.assert_called_once_with(embedding_model_name="other")
+    mock_build_vectoriser.assert_called_once_with()
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
         data_type="csv",
@@ -109,7 +108,7 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
         num_vectors=1,
         search=MagicMock(return_value=make_search_output(rows)),
     )
-    backend = ClassifaiVectorBackend()
+    backend = ClassifaiVectorBackend(embedding_model_name="other")
 
     with (
         patch.object(
@@ -123,7 +122,7 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
             return_value=fake_store,
         ),
     ):
-        index = backend.load(folder_path=folder_path, embedding_model_name="other")
+        index = backend.load(folder_path=folder_path)
 
     results = index.search("dog", limit=EXPECTED_SEARCH_LIMIT)
 

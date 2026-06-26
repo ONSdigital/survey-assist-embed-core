@@ -51,7 +51,11 @@ class EmbeddingHandler:
         self.k_matches = k_matches
         self.db_dir = db_dir
         self.index_source_file = index_source_file
-        self._backend = backend if backend is not None else ClassifaiVectorBackend()
+        self._backend = (
+            backend
+            if backend is not None
+            else ClassifaiVectorBackend(embedding_model_name=embedding_model_name)
+        )
         self._artifact_store = (
             artifact_store if artifact_store is not None else ClassifaiArtifactStore()
         )
@@ -89,10 +93,7 @@ class EmbeddingHandler:
                 f"{exc} Or provide a valid index source file."
             ) from exc
 
-        vector_store = self._backend.load(
-            folder_path=db_dir,
-            embedding_model_name=self.embedding_model_name,
-        )
+        vector_store = self._backend.load(folder_path=db_dir)
 
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
         index_source_file = self._artifact_store.read_index_source_file(
@@ -122,7 +123,6 @@ class EmbeddingHandler:
 
         vector_store = self._backend.build(
             file_name=index_source_file,
-            embedding_model_name=self.embedding_model_name,
             output_dir=self.db_dir,
         )
 

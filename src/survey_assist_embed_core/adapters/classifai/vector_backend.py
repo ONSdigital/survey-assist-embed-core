@@ -39,19 +39,19 @@ class _ClassifaiVectorIndex:
 class ClassifaiVectorBackend:
     """ClassifAI implementation of the vector backend port."""
 
-    def _build_vectoriser(
-        self, *, embedding_model_name: str
-    ) -> ChromaDBesqueHFVectoriser:
+    def __init__(self, *, embedding_model_name: str):
+        """Store the embedding model used to construct ClassifAI vectorisers."""
+        self._embedding_model_name = embedding_model_name
+
+    def _build_vectoriser(self) -> ChromaDBesqueHFVectoriser:
         """Build the default ClassifAI vectoriser for an embedding model."""
         return ChromaDBesqueHFVectoriser(
-            model_name=f"sentence-transformers/{embedding_model_name}"
+            model_name=f"sentence-transformers/{self._embedding_model_name}"
         )
 
-    def load(self, *, folder_path: str, embedding_model_name: str) -> VectorIndex:
+    def load(self, *, folder_path: str) -> VectorIndex:
         """Load a ClassifAI vector store from filespace."""
-        vectoriser = self._build_vectoriser(
-            embedding_model_name=embedding_model_name,
-        )
+        vectoriser = self._build_vectoriser()
         store = VectorStore.from_filespace(
             folder_path=folder_path,
             vectoriser=vectoriser,
@@ -59,13 +59,9 @@ class ClassifaiVectorBackend:
         )
         return _ClassifaiVectorIndex(store)
 
-    def build(
-        self, *, file_name: str, embedding_model_name: str, output_dir: str
-    ) -> VectorIndex:
+    def build(self, *, file_name: str, output_dir: str) -> VectorIndex:
         """Build a ClassifAI vector store from a CSV source file."""
-        vectoriser = self._build_vectoriser(
-            embedding_model_name=embedding_model_name,
-        )
+        vectoriser = self._build_vectoriser()
         store = VectorStore(
             file_name=file_name,
             data_type="csv",

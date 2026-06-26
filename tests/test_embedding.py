@@ -267,6 +267,7 @@ def test_embedding_handler_initialization(tmp_path: Path) -> None:
 
     assert isinstance(handler._backend, ClassifaiVectorBackend)
     assert handler.embedding_model_name == "other"
+    assert handler._backend._embedding_model_name == "other"
 
 
 def test_load_existing_vector_store_local(tmp_path: Path) -> None:
@@ -293,7 +294,6 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     assert result == (fake_store, "source.csv")
     handler._backend.load.assert_called_once_with(
         folder_path=str(db_dir),
-        embedding_model_name=handler.embedding_model_name,
     )
 
 
@@ -373,7 +373,6 @@ def test_load_existing_vector_store_gcs() -> None:
     mock_download.assert_called_once_with("gs://my-bucket/prefix")
     handler._backend.load.assert_called_once_with(
         folder_path=downloaded.path,
-        embedding_model_name=handler.embedding_model_name,
     )
 
 
@@ -453,7 +452,6 @@ def test_build_vector_store_calls_backend_with_resolved_inputs(tmp_path: Path) -
 
     handler._backend.build.assert_called_once_with(
         file_name="some-file.csv",
-        embedding_model_name=handler.embedding_model_name,
         output_dir=str(db_dir),
     )
 
