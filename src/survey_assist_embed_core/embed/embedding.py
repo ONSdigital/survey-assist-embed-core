@@ -24,7 +24,6 @@ from survey_assist_embed_core.ports import (
     VectorIndex,
 )
 
-DEFAULT_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
 
@@ -37,7 +36,6 @@ class EmbeddingHandler:
     # pylint: disable-next=too-many-arguments
     def __init__(  # noqa: PLR0913
         self,
-        embedding_model_name: str = DEFAULT_EMBEDDING_MODEL_NAME,
         db_dir: str = DEFAULT_DB_DIR,
         k_matches: int = DEFAULT_K_MATCHES,
         index_source_file: str | None = None,
@@ -47,21 +45,16 @@ class EmbeddingHandler:
         storage: Storage | None = None,
     ):
         """Initialise the handler for an existing or newly built vector store."""
-        self.embedding_model_name = embedding_model_name
         self.k_matches = k_matches
         self.db_dir = db_dir
         self.index_source_file = index_source_file
-        self._backend = (
-            backend
-            if backend is not None
-            else ClassifaiVectorBackend(embedding_model_name=embedding_model_name)
-        )
+        self._backend = backend if backend is not None else ClassifaiVectorBackend()
         self._artifact_store = (
             artifact_store if artifact_store is not None else ClassifaiArtifactStore()
         )
         self._storage = storage if storage is not None else LocalGcsStorage()
 
-        logger.info("Using embedding model: %s", embedding_model_name)
+        logger.info("Using vector backend config: %s", self._backend.config)
 
         self.spell = Speller()
 
@@ -178,10 +171,10 @@ class EmbeddingHandler:
     def get_embed_config(self) -> EmbeddingStatus:
         """Return the current embedding configuration and ready status."""
         return EmbeddingStatus(
-            embedding_model_name=self.embedding_model_name,
             db_dir=self.db_dir,
             k_matches=self.k_matches,
             index_source_file=self.index_source_file,
+            backend=self._backend.config,
             index_size=self.index_size,
             status="ready",
         )

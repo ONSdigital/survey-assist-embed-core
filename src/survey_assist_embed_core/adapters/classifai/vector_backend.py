@@ -11,7 +11,10 @@ from classifai.indexers import (
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
     ChromaDBesqueHFVectoriser,
 )
+from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
+
+DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 class _ClassifaiVectorIndex:
@@ -39,9 +42,21 @@ class _ClassifaiVectorIndex:
 class ClassifaiVectorBackend:
     """ClassifAI implementation of the vector backend port."""
 
-    def __init__(self, *, embedding_model_name: str):
+    def __init__(
+        self,
+        *,
+        embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
+    ):
         """Store the embedding model used to construct ClassifAI vectorisers."""
         self._embedding_model_name = embedding_model_name
+
+    @property
+    def config(self) -> VectorBackendConfig:
+        """Return typed backend metadata for handler status output."""
+        return VectorBackendConfig(
+            backend_name="classifai",
+            settings={"embedding_model_name": self._embedding_model_name},
+        )
 
     def _build_vectoriser(self) -> ChromaDBesqueHFVectoriser:
         """Build the default ClassifAI vectoriser for an embedding model."""

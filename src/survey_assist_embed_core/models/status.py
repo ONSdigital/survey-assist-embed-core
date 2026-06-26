@@ -1,17 +1,33 @@
 """Retrieval configuration and status models."""
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 MAX_K_MATCHES = 100
 
+type BackendConfigValue = str | int | float | bool | None
+
+
+class VectorBackendConfig(BaseModel):
+    """Typed description of a concrete vector backend and its settings."""
+
+    backend_name: str
+    settings: dict[str, BackendConfigValue] = Field(default_factory=dict)
+
+    @field_validator("backend_name")
+    @classmethod
+    def _validate_backend_name(cls, value: str) -> str:
+        if not value or value == "unknown":
+            raise ValueError("backend_name must be a valid value")
+        return value
+
 
 class EmbeddingConfig(BaseModel):
-    """Configuration for an embedding model and vector store."""
+    """Configuration for retrieval against a vector-store backend."""
 
-    embedding_model_name: str
     db_dir: str
     index_source_file: str | None = None
     k_matches: int
+    backend: VectorBackendConfig
 
     @field_validator("k_matches")
     @classmethod
@@ -34,10 +50,6 @@ class EmbeddingStatus(EmbeddingConfig):
         if self.status == "ready":
             if self.index_size < 1:
                 raise ValueError("index_size must be at least 1 when ready")
-            for field_name, field_value in [
-                ("embedding_model_name", self.embedding_model_name),
-                ("db_dir", self.db_dir),
-            ]:
-                if not field_value or field_value == "unknown":
-                    raise ValueError(f"{field_name} must be a valid value when ready")
+            if not self.db_dir or self.db_dir == "unknown":
+                raise ValueError("db_dir must be a valid value when ready")
         return self

@@ -3,6 +3,8 @@
 from collections.abc import Mapping
 from typing import Protocol
 
+from survey_assist_embed_core.models.status import VectorBackendConfig
+
 type SearchRow = Mapping[str, object]
 
 
@@ -19,6 +21,10 @@ class VectorIndex(Protocol):
 
 class VectorBackend(Protocol):
     """Protocol for build/load operations against a vector backend."""
+
+    @property
+    def config(self) -> VectorBackendConfig:
+        """Return typed backend metadata for diagnostics and status output."""
 
     def load(self, *, folder_path: str) -> VectorIndex:
         """Load a vector index from a persisted folder."""

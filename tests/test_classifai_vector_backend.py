@@ -130,3 +130,10 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
     assert results[0]["doc_label"] == "02"
     assert results[0]["doc_text"] == "dog"
     assert results[0]["score"] == EXPECTED_SEARCH_SCORE
+
+
+def test_classifai_vector_backend_config_reports_model_name() -> None:
+    backend = ClassifaiVectorBackend(embedding_model_name="other")
+
+    assert backend.config.backend_name == "classifai"
+    assert backend.config.settings == {"embedding_model_name": "other"}
