@@ -198,6 +198,33 @@ def test_download_vector_store_from_gcs_missing_prefix() -> None:
 
 
 @pytest.mark.utils
+def test_download_vector_store_from_gcs_directory_markers_only() -> None:
+    """Directory marker blobs should be ignored and still count as no files."""
+    directory_blob = _FakeBlob(exists=True)
+
+    fake_client = _FakeStorageClient(
+        {
+            "my-bucket": _FakeBucket(
+                {
+                    "prefix/": directory_blob,
+                }
+            )
+        }
+    )
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.storage.gcs.Client",
+            return_value=fake_client,
+        ),
+        pytest.raises(FileNotFoundError, match=r"No files found in GCS store path"),
+    ):
+        download_vector_store_from_gcs("gs://my-bucket/prefix")
+
+    assert directory_blob.downloaded_to is None
+
+
+@pytest.mark.utils
 def test_download_one_file_from_gcs_success() -> None:
     """The helper should download one remote source file into temp storage."""
     file_blob = _FakeBlob(exists=True)
