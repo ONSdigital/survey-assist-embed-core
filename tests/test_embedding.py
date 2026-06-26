@@ -696,7 +696,7 @@ def test_chromadbesque_transform_single_string_wraps_in_list() -> None:
     fake_vec = np.array([[1.0, 0.0]])
 
     with patch(
-        "survey_assist_embed_core.embed.embedding.HuggingFaceVectoriser.transform",
+        "survey_assist_embed_core.adapters.classifai.vectoriser.HuggingFaceVectoriser.transform",
         return_value=fake_vec,
     ) as mock_super:
         result = inst.transform("hello")
@@ -710,7 +710,7 @@ def test_chromadbesque_transform_list_passes_through() -> None:
     fake_vec = np.array([[1.0, 0.0], [0.0, 1.0]])
 
     with patch(
-        "survey_assist_embed_core.embed.embedding.HuggingFaceVectoriser.transform",
+        "survey_assist_embed_core.adapters.classifai.vectoriser.HuggingFaceVectoriser.transform",
         return_value=fake_vec,
     ) as mock_super:
         result = inst.transform(["hello", "world"])

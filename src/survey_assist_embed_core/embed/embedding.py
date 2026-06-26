@@ -5,11 +5,10 @@
 import logging
 from typing import cast
 
-import numpy as np
 from autocorrect import Speller
-from classifai.vectorisers import HuggingFaceVectoriser
 
 from survey_assist_embed_core.adapters.classifai import (
+    ChromaDBesqueHFVectoriser,
     ClassifaiArtifactStore,
     ClassifaiVectorBackend,
 )
@@ -31,40 +30,6 @@ DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
 
 logger = logging.getLogger(__name__)
-
-
-class ChromaDBesqueHFVectoriser(HuggingFaceVectoriser):
-    """Normalise HuggingFace vectors to unit length after embedding."""
-
-    def _normalize(self, vectors: np.ndarray) -> np.ndarray:
-        """Normalise row vectors to unit length."""
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        norms = np.where(norms == 0, 1.0, norms)
-        return vectors / norms
-
-    def transform(self, texts: list[str] | str) -> np.ndarray:
-        """Transform texts into normalised vectors."""
-        if isinstance(texts, str):
-            texts = [texts]
-
-        vectors = super().transform(texts)
-        return self._normalize(vectors)
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of documents into normalised vectors."""
-        return self.transform(texts).tolist()
-
-    def embed_query(self, text: str) -> list[float]:
-        """Embed a single query into a normalised vector."""
-        return self.transform([text]).tolist()[0]
-
-    def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of documents into normalised vectors."""
-        return self.embed_documents(texts)
-
-    def aembed_query(self, text: str) -> list[float]:
-        """Embed a single query into a normalised vector."""
-        return self.embed_query(text)
 
 
 class EmbeddingHandler:
@@ -93,7 +58,7 @@ class EmbeddingHandler:
         )
         self._storage = storage if storage is not None else LocalGcsStorage()
 
-        self.embeddings: HuggingFaceVectoriser = ChromaDBesqueHFVectoriser(
+        self.embeddings = ChromaDBesqueHFVectoriser(
             model_name=f"sentence-transformers/{embedding_model_name}"
         )
         logger.info("Using embedding model: %s", embedding_model_name)

@@ -4,8 +4,12 @@ from survey_assist_embed_core.adapters.classifai.artifacts import ClassifaiArtif
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
     ClassifaiVectorBackend,
 )
+from survey_assist_embed_core.adapters.classifai.vectoriser import (
+    ChromaDBesqueHFVectoriser,
+)
 
 __all__ = [
+    "ChromaDBesqueHFVectoriser",
     "ClassifaiArtifactStore",
     "ClassifaiVectorBackend",
 ]
