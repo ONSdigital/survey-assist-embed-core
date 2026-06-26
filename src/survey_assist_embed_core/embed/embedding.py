@@ -13,18 +13,18 @@ from survey_assist_embed_core.adapters.classifai import (
     ClassifaiArtifactStore,
     ClassifaiVectorBackend,
 )
-from survey_assist_embed_core.adapters.storage import (
-    DownloadedVectorStore,
-    download_one_file_from_gcs,
-    download_vector_store_from_gcs,
-    is_gcs_path,
-)
+from survey_assist_embed_core.adapters.storage import LocalGcsStorage
 from survey_assist_embed_core.models import (
     EmbeddingStatus,
     SearchIndexItem,
     SearchIndexResponse,
 )
-from survey_assist_embed_core.ports import ArtifactStore, VectorBackend, VectorIndex
+from survey_assist_embed_core.ports import (
+    ArtifactStore,
+    Storage,
+    VectorBackend,
+    VectorIndex,
+)
 
 DEFAULT_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 DEFAULT_DB_DIR = "vector_store"
@@ -78,6 +78,7 @@ class EmbeddingHandler:
         index_source_file: str | None = None,
         backend: VectorBackend | None = None,
         artifact_store: ArtifactStore | None = None,
+        storage: Storage | None = None,
     ):
         """Initialise the handler for an existing or newly built vector store."""
         self.embedding_model_name = embedding_model_name
@@ -86,6 +87,7 @@ class EmbeddingHandler:
         self.index_source_file = index_source_file
         self._backend = backend or ClassifaiVectorBackend()
         self._artifact_store = artifact_store or ClassifaiArtifactStore()
+        self._storage = storage or LocalGcsStorage()
 
         self.embeddings: HuggingFaceVectoriser = ChromaDBesqueHFVectoriser(
             model_name=f"sentence-transformers/{embedding_model_name}"
@@ -94,7 +96,6 @@ class EmbeddingHandler:
 
         self.spell = Speller()
 
-        self._downloaded_vector_store: DownloadedVectorStore | None = None
         self.vector_store: VectorIndex
         if not self.index_source_file:
             self.vector_store, self.index_source_file = (
@@ -114,11 +115,7 @@ class EmbeddingHandler:
     def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
         """Load an existing vector store from a local folder or a GCS URI."""
         logger.info("Loading existing vector store from %s", self.db_dir)
-        db_dir = self.db_dir
-
-        if is_gcs_path(db_dir):
-            self._downloaded_vector_store = download_vector_store_from_gcs(db_dir)
-            db_dir = self._downloaded_vector_store.temp_dir.name
+        db_dir = self._storage.resolve_store_path(path=self.db_dir)
 
         try:
             self._artifact_store.ensure_persisted_vector_store(folder_path=db_dir)
@@ -156,9 +153,7 @@ class EmbeddingHandler:
                 self.db_dir,
             )
 
-        if is_gcs_path(index_source_file):
-            downloaded_file = download_one_file_from_gcs(index_source_file)
-            index_source_file = downloaded_file.path
+        index_source_file = self._storage.resolve_source_file(path=index_source_file)
 
         vector_store = self._backend.build(
             file_name=index_source_file,
