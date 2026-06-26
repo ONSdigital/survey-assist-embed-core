@@ -9,6 +9,12 @@ from pathlib import Path
 from survey_assist_embed_core.adapters.classifai import ClassifaiArtifactStore
 
 
+class _CustomClassifaiArtifactStore(ClassifaiArtifactStore):
+    METADATA_FILE_NAME = "store-metadata.json"
+    VECTORS_FILE_NAME = "store-vectors.parquet"
+    INDEX_SOURCE_FILE_KEY = "source_path"
+
+
 def test_classifai_artifact_store_detects_persisted_store(tmp_path: Path) -> None:
     artifact_store = ClassifaiArtifactStore()
     folder_path = tmp_path / "vector_store"
@@ -22,10 +28,7 @@ def test_classifai_artifact_store_detects_persisted_store(tmp_path: Path) -> Non
 def test_classifai_artifact_store_error_uses_configured_layout_names(
     tmp_path: Path,
 ) -> None:
-    artifact_store = ClassifaiArtifactStore(
-        metadata_file_name="store-metadata.json",
-        vectors_file_name="store-vectors.parquet",
-    )
+    artifact_store = _CustomClassifaiArtifactStore()
     folder_path = tmp_path / "vector_store"
     folder_path.mkdir()
 
@@ -71,11 +74,7 @@ def test_classifai_artifact_store_detects_vectors_file(tmp_path: Path) -> None:
 def test_classifai_artifact_store_uses_configured_layout_names(
     tmp_path: Path,
 ) -> None:
-    artifact_store = ClassifaiArtifactStore(
-        metadata_file_name="store-metadata.json",
-        vectors_file_name="store-vectors.parquet",
-        index_source_file_key="source_path",
-    )
+    artifact_store = _CustomClassifaiArtifactStore()
     folder_path = tmp_path / "vector_store"
     folder_path.mkdir()
     (folder_path / "store-vectors.parquet").write_text("dummy", encoding="utf-8")

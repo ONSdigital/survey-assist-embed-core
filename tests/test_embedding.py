@@ -334,6 +334,10 @@ def test_load_existing_vector_store_local_missing_files(tmp_path: Path) -> None:
 def test_load_existing_vector_store_error_uses_artifact_store_names(
     tmp_path: Path,
 ) -> None:
+    class _CustomClassifaiArtifactStore(ClassifaiArtifactStore):
+        METADATA_FILE_NAME = "store-metadata.json"
+        VECTORS_FILE_NAME = "store-vectors.parquet"
+
     db_dir = tmp_path / "vector_store"
     db_dir.mkdir()
 
@@ -341,10 +345,7 @@ def test_load_existing_vector_store_error_uses_artifact_store_names(
     handler.db_dir = str(db_dir)
     handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
-    handler._artifact_store = ClassifaiArtifactStore(
-        metadata_file_name="store-metadata.json",
-        vectors_file_name="store-vectors.parquet",
-    )
+    handler._artifact_store = _CustomClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
 
     with pytest.raises(
@@ -403,6 +404,39 @@ def test_load_existing_vector_store_raises_when_dir_missing(tmp_path: Path) -> N
 
     with pytest.raises(FileNotFoundError, match="No persisted vector store found"):
         handler._load_existing_vector_store()
+
+
+def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error() -> (
+    None
+):
+    handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.db_dir = "gs://my-bucket/prefix"
+    handler.embeddings = object()
+    handler._backend = SimpleNamespace(load=MagicMock())
+    handler._artifact_store = ClassifaiArtifactStore()
+    handler._storage = LocalGcsStorage()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        Path(temp_dir, "metadata.json").write_text("{}", encoding="utf-8")
+        downloaded = DownloadedVectorStore(
+            path=temp_dir,
+            temp_dir=SimpleNamespace(name=temp_dir),
+        )
+
+        with (
+            patch(
+                "survey_assist_embed_core.adapters.storage.local_gcs.download_vector_store_from_gcs",
+                return_value=downloaded,
+            ),
+            pytest.raises(
+                FileNotFoundError,
+                match=(
+                    r"Required persisted artifacts: metadata\.json, vectors\.parquet.*"
+                    r"Or provide a valid index source file\."
+                ),
+            ),
+        ):
+            handler._load_existing_vector_store()
 
 
 def test_build_vector_store_raises_when_db_dir_missing() -> None:

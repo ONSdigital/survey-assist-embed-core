@@ -2,7 +2,6 @@
 
 import logging
 import os
-import posixpath
 import tempfile
 from dataclasses import dataclass
 from types import TracebackType
@@ -63,38 +62,34 @@ def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
 
 
 def download_vector_store_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
-    """Download ``metadata.json`` and ``vectors.parquet`` from GCS."""
+    """Download all files under a GCS store path into a temp directory."""
     bucket_name, prefix = parse_gcs_uri(gcs_uri)
-
-    metadata_blob_name = (
-        posixpath.join(prefix, "metadata.json") if prefix else "metadata.json"
-    )
-    vectors_blob_name = (
-        posixpath.join(prefix, "vectors.parquet") if prefix else "vectors.parquet"
-    )
+    blob_prefix = f"{prefix}/" if prefix else ""
 
     client = Client()
     bucket: Bucket = client.bucket(bucket_name)
+    blobs: list[Blob] = list(bucket.list_blobs(prefix=blob_prefix))
 
-    metadata_blob: Blob = bucket.blob(metadata_blob_name)
-    vectors_blob: Blob = bucket.blob(vectors_blob_name)
-
-    missing = []
-    if not metadata_blob.exists():
-        missing.append(f"gs://{bucket_name}/{metadata_blob_name}")
-    if not vectors_blob.exists():
-        missing.append(f"gs://{bucket_name}/{vectors_blob_name}")
-
-    if missing:
-        raise FileNotFoundError(
-            "Required vector store file(s) not found in GCS: " + ", ".join(missing)
-        )
+    if not blobs:
+        raise FileNotFoundError(f"No files found in GCS store path: {gcs_uri}")
 
     temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
     local_dir = temp_dir.name
+    downloaded_files = 0
 
-    metadata_blob.download_to_filename(os.path.join(local_dir, "metadata.json"))
-    vectors_blob.download_to_filename(os.path.join(local_dir, "vectors.parquet"))
+    for blob in blobs:
+        relative_name = blob.name[len(blob_prefix) :] if blob_prefix else blob.name
+        if not relative_name or relative_name.endswith("/"):
+            continue
+
+        local_path = os.path.join(local_dir, relative_name)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+        downloaded_files += 1
+
+    if downloaded_files == 0:
+        temp_dir.cleanup()
+        raise FileNotFoundError(f"No files found in GCS store path: {gcs_uri}")
 
     logger.info(
         "Downloaded vector store from %s to local directory %s.",

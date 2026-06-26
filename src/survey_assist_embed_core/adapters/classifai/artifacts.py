@@ -2,36 +2,25 @@
 
 import json
 import os
+from typing import ClassVar
 
 from survey_assist_embed_core.ports import ArtifactStore
-
-METADATA_FILE_NAME = "metadata.json"
-VECTORS_FILE_NAME = "vectors.parquet"
-INDEX_SOURCE_FILE_KEY = "index_source_file"
 
 
 class ClassifaiArtifactStore(ArtifactStore):
     """Persisted artifact adapter for the ClassifAI vector-store layout."""
 
-    def __init__(
-        self,
-        *,
-        metadata_file_name: str = METADATA_FILE_NAME,
-        vectors_file_name: str = VECTORS_FILE_NAME,
-        index_source_file_key: str = INDEX_SOURCE_FILE_KEY,
-    ) -> None:
-        """Store the ClassifAI persisted-layout policy for later file operations."""
-        self._metadata_file_name = metadata_file_name
-        self._vectors_file_name = vectors_file_name
-        self._index_source_file_key = index_source_file_key
+    METADATA_FILE_NAME: ClassVar[str] = "metadata.json"
+    VECTORS_FILE_NAME: ClassVar[str] = "vectors.parquet"
+    INDEX_SOURCE_FILE_KEY: ClassVar[str] = "index_source_file"
 
     def _metadata_path(self, folder_path: str) -> str:
         """Return the metadata file path for a persisted store folder."""
-        return os.path.join(folder_path, self._metadata_file_name)
+        return os.path.join(folder_path, self.METADATA_FILE_NAME)
 
     def _vectors_path(self, folder_path: str) -> str:
         """Return the vectors file path for a persisted store folder."""
-        return os.path.join(folder_path, self._vectors_file_name)
+        return os.path.join(folder_path, self.VECTORS_FILE_NAME)
 
     def _has_persisted_vector_store(self, folder_path: str) -> bool:
         """Return whether the expected persisted ClassifAI files are present."""
@@ -49,7 +38,7 @@ class ClassifaiArtifactStore(ArtifactStore):
             return
 
         required_artifacts = ", ".join(
-            (self._metadata_file_name, self._vectors_file_name)
+            (self.METADATA_FILE_NAME, self.VECTORS_FILE_NAME)
         )
         raise FileNotFoundError(
             f"No persisted vector store found in {folder_path}. "
@@ -64,8 +53,8 @@ class ClassifaiArtifactStore(ArtifactStore):
         """Read the original source-file path from persisted metadata."""
         metadata_path = self._metadata_path(folder_path)
         with open(metadata_path, encoding="utf-8") as file_obj:
-            metadata = json.load(file_obj)
-        return metadata.get(self._index_source_file_key, None)
+            metadata: dict = json.load(file_obj)
+        return metadata.get(self.INDEX_SOURCE_FILE_KEY)
 
     def write_index_source_file(
         self, *, folder_path: str, index_source_file: str | None
@@ -78,6 +67,6 @@ class ClassifaiArtifactStore(ArtifactStore):
         else:
             metadata = {}
 
-        metadata[self._index_source_file_key] = str(index_source_file)
+        metadata[self.INDEX_SOURCE_FILE_KEY] = str(index_source_file)
         with open(metadata_path, "w", encoding="utf-8") as file_obj:
             json.dump(metadata, file_obj)
