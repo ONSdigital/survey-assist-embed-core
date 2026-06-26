@@ -8,7 +8,6 @@ from typing import cast
 from autocorrect import Speller
 
 from survey_assist_embed_core.adapters.classifai import (
-    ChromaDBesqueHFVectoriser,
     ClassifaiArtifactStore,
     ClassifaiVectorBackend,
 )
@@ -58,9 +57,6 @@ class EmbeddingHandler:
         )
         self._storage = storage if storage is not None else LocalGcsStorage()
 
-        self.embeddings = ChromaDBesqueHFVectoriser(
-            model_name=f"sentence-transformers/{embedding_model_name}"
-        )
         logger.info("Using embedding model: %s", embedding_model_name)
 
         self.spell = Speller()
@@ -95,7 +91,7 @@ class EmbeddingHandler:
 
         vector_store = self._backend.load(
             folder_path=db_dir,
-            vectoriser=self.embeddings,
+            embedding_model_name=self.embedding_model_name,
         )
 
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
@@ -126,7 +122,7 @@ class EmbeddingHandler:
 
         vector_store = self._backend.build(
             file_name=index_source_file,
-            vectoriser=self.embeddings,
+            embedding_model_name=self.embedding_model_name,
             output_dir=self.db_dir,
         )
 

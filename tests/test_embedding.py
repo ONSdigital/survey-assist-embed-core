@@ -13,11 +13,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from survey_assist_embed_core.adapters.classifai import ClassifaiArtifactStore
+from survey_assist_embed_core.adapters.classifai import (
+    ChromaDBesqueHFVectoriser,
+    ClassifaiArtifactStore,
+    ClassifaiVectorBackend,
+)
 from survey_assist_embed_core.adapters.storage import LocalGcsStorage
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
 from survey_assist_embed_core.embed import EmbeddingHandler
-from survey_assist_embed_core.embed.embedding import ChromaDBesqueHFVectoriser
 from survey_assist_embed_core.models import SearchIndexItem, SearchIndexResponse
 
 EXPECTED_TOY_INDEX_SIZE = 4
@@ -30,18 +33,11 @@ EXPECTED_CONFIG_INDEX_SIZE = 7
 @pytest.fixture
 def embedding_handler_for_embed(tmp_path: Path) -> EmbeddingHandler:
     placeholder_store = SimpleNamespace(num_vectors=1)
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(placeholder_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(placeholder_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -69,18 +65,10 @@ def embedding_handler_search(tmp_path: Path) -> EmbeddingHandler:
         num_vectors=EXPECTED_TOY_INDEX_SIZE,
         search=MagicMock(return_value=rows),
     )
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
-
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(fake_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(fake_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -92,18 +80,11 @@ def embedding_handler_search(tmp_path: Path) -> EmbeddingHandler:
 
 def test_embedding_handler_init_sets_vector_store(tmp_path: Path) -> None:
     built_store = SimpleNamespace(num_vectors=EXPECTED_TOY_INDEX_SIZE)
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(built_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(built_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -115,18 +96,11 @@ def test_embedding_handler_init_sets_vector_store(tmp_path: Path) -> None:
 
 def test_embedding_handler_init_sets_index_size(tmp_path: Path) -> None:
     built_store = SimpleNamespace(num_vectors=EXPECTED_TOY_INDEX_SIZE)
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(built_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(built_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -149,16 +123,12 @@ def test_embedding_handler_init_keeps_falsey_explicit_dependencies(
     artifact_store = _FalseyDependency()
     storage = _FalseyDependency()
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(built_store, "mock-source.csv"),
-        ),
+    del fake_embeddings
+
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(built_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -188,18 +158,11 @@ def test_search_index_uses_backend_search_rows(tmp_path: Path) -> None:
         num_vectors=1,
         search=MagicMock(return_value=rows),
     )
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(fake_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(fake_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -215,18 +178,11 @@ def test_search_index_uses_backend_search_rows(tmp_path: Path) -> None:
 
 def test_search_index_multi(tmp_path: Path) -> None:
     placeholder_store = SimpleNamespace(num_vectors=1)
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(placeholder_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(placeholder_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -263,18 +219,11 @@ def test_search_index_multi(tmp_path: Path) -> None:
 
 def test_search_index_multi_filters_none_values(tmp_path: Path) -> None:
     placeholder_store = SimpleNamespace(num_vectors=1)
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(placeholder_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(placeholder_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",
@@ -309,19 +258,15 @@ def test_search_index_multi_all_none_returns_empty(
 def test_embedding_handler_initialization(tmp_path: Path) -> None:
     mock_vector_store = SimpleNamespace(num_vectors=123)
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser"
-        ) as mock_hf,
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(mock_vector_store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(mock_vector_store, "mock-source.csv"),
     ):
-        EmbeddingHandler("other", db_dir=str(tmp_path / "vector_store"))
+        handler = EmbeddingHandler("other", db_dir=str(tmp_path / "vector_store"))
 
-        mock_hf.assert_called_once_with(model_name="sentence-transformers/other")
+    assert isinstance(handler._backend, ClassifaiVectorBackend)
+    assert handler.embedding_model_name == "other"
 
 
 def test_load_existing_vector_store_local(tmp_path: Path) -> None:
@@ -334,8 +279,8 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     (db_dir / "vectors.parquet").write_text("dummy", encoding="utf-8")
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
@@ -348,7 +293,7 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     assert result == (fake_store, "source.csv")
     handler._backend.load.assert_called_once_with(
         folder_path=str(db_dir),
-        vectoriser=handler.embeddings,
+        embedding_model_name=handler.embedding_model_name,
     )
 
 
@@ -358,8 +303,8 @@ def test_load_existing_vector_store_local_missing_files(tmp_path: Path) -> None:
     (db_dir / "metadata.json").write_text("{}", encoding="utf-8")
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
@@ -379,8 +324,8 @@ def test_load_existing_vector_store_error_uses_artifact_store_names(
     db_dir.mkdir()
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
     handler._artifact_store = _CustomClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
@@ -398,8 +343,8 @@ def test_load_existing_vector_store_error_uses_artifact_store_names(
 
 def test_load_existing_vector_store_gcs() -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = "gs://my-bucket/prefix"
-    handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
@@ -428,14 +373,14 @@ def test_load_existing_vector_store_gcs() -> None:
     mock_download.assert_called_once_with("gs://my-bucket/prefix")
     handler._backend.load.assert_called_once_with(
         folder_path=downloaded.path,
-        vectoriser=handler.embeddings,
+        embedding_model_name=handler.embedding_model_name,
     )
 
 
 def test_load_existing_vector_store_raises_when_dir_missing(tmp_path: Path) -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(tmp_path / "nonexistent")
-    handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
@@ -448,8 +393,8 @@ def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error(
     None
 ):
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = "gs://my-bucket/prefix"
-    handler.embeddings = object()
     handler._backend = SimpleNamespace(load=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
     handler._storage = LocalGcsStorage()
@@ -480,6 +425,7 @@ def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error(
 
 def test_build_vector_store_raises_when_db_dir_missing() -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = None
     handler._backend = SimpleNamespace(build=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
@@ -493,8 +439,8 @@ def test_build_vector_store_calls_backend_with_resolved_inputs(tmp_path: Path) -
     db_dir = tmp_path / "vector_store"
     db_dir.mkdir()
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
@@ -507,7 +453,7 @@ def test_build_vector_store_calls_backend_with_resolved_inputs(tmp_path: Path) -
 
     handler._backend.build.assert_called_once_with(
         file_name="some-file.csv",
-        vectoriser=handler.embeddings,
+        embedding_model_name=handler.embedding_model_name,
         output_dir=str(db_dir),
     )
 
@@ -517,8 +463,8 @@ def test_build_vector_store_creates_metadata_when_missing(tmp_path: Path) -> Non
     db_dir.mkdir()
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
@@ -542,8 +488,8 @@ def test_build_vector_store_updates_existing_metadata(tmp_path: Path) -> None:
     )
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
@@ -568,8 +514,8 @@ def test_build_vector_store_uses_downloaded_gcs_source_file(tmp_path: Path) -> N
     downloaded_csv.write_text("doc", encoding="utf-8")
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler.index_source_file = "gs://my-bucket/data.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
@@ -602,8 +548,8 @@ def test_build_vector_store_logs_warning_when_parquet_exists(
     (db_dir / "vectors.parquet").write_text("dummy", encoding="utf-8")
 
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.embedding_model_name = "other"
     handler.db_dir = str(db_dir)
-    handler.embeddings = object()
     handler.index_source_file = "some-file.csv"
     handler._backend = SimpleNamespace(build=MagicMock())
     handler._artifact_store = ClassifaiArtifactStore()
@@ -622,19 +568,11 @@ def test_build_vector_store_logs_warning_when_parquet_exists(
 
 def test_embedding_handler_builds_vector_store_from_source(tmp_path: Path) -> None:
     built_store = SimpleNamespace(num_vectors=2)
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._build_vector_store",
-            return_value=built_store,
-        ) as mock_build,
-    ):
+    with patch(
+        "survey_assist_embed_core.embed.embedding.EmbeddingHandler._build_vector_store",
+        return_value=built_store,
+    ) as mock_build:
         handler = EmbeddingHandler(
             embedding_model_name="other",
             db_dir=str(tmp_path / "vector_store"),
@@ -646,19 +584,12 @@ def test_embedding_handler_builds_vector_store_from_source(tmp_path: Path) -> No
 
 
 def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
-    fake_embeddings = SimpleNamespace(model_name="sentence-transformers/other")
     store = SimpleNamespace(num_vectors=7)
 
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ChromaDBesqueHFVectoriser",
-            return_value=fake_embeddings,
-        ),
-        patch(
-            "survey_assist_embed_core.embed.embedding."
-            "EmbeddingHandler._load_existing_vector_store",
-            return_value=(store, "mock-source.csv"),
-        ),
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(
             embedding_model_name="other",

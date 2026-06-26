@@ -1,7 +1,7 @@
 """Ports for vector-store backends."""
 
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Protocol
 
 type SearchRow = Mapping[str, object]
 
@@ -20,8 +20,10 @@ class VectorIndex(Protocol):
 class VectorBackend(Protocol):
     """Protocol for build/load operations against a vector backend."""
 
-    def load(self, *, folder_path: str, vectoriser: Any) -> VectorIndex:
+    def load(self, *, folder_path: str, embedding_model_name: str) -> VectorIndex:
         """Load a vector index from a persisted folder."""
 
-    def build(self, *, file_name: str, vectoriser: Any, output_dir: str) -> VectorIndex:
+    def build(
+        self, *, file_name: str, embedding_model_name: str, output_dir: str
+    ) -> VectorIndex:
         """Build a vector index from a prepared source file."""

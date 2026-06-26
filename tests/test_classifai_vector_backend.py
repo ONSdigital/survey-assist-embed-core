@@ -40,14 +40,22 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
         search=MagicMock(),
     )
 
-    with patch(
-        "survey_assist_embed_core.adapters.classifai.vector_backend."
-        "VectorStore.from_filespace",
-        return_value=fake_store,
-    ) as mock_from_filespace:
-        index = backend.load(folder_path=folder_path, vectoriser=vectoriser)
+    with (
+        patch.object(
+            backend,
+            "_build_vectoriser",
+            return_value=vectoriser,
+        ) as mock_build_vectoriser,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
+        ) as mock_from_filespace,
+    ):
+        index = backend.load(folder_path=folder_path, embedding_model_name="other")
 
     assert index.num_vectors == EXPECTED_LOADED_VECTOR_COUNT
+    mock_build_vectoriser.assert_called_once_with(embedding_model_name="other")
     mock_from_filespace.assert_called_once_with(
         folder_path=folder_path,
         vectoriser=vectoriser,
@@ -63,17 +71,25 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
         search=MagicMock(),
     )
 
-    with patch(
-        "survey_assist_embed_core.adapters.classifai.vector_backend.VectorStore",
-        return_value=fake_store,
-    ) as mock_vector_store:
+    with (
+        patch.object(
+            backend,
+            "_build_vectoriser",
+            return_value=vectoriser,
+        ) as mock_build_vectoriser,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.VectorStore",
+            return_value=fake_store,
+        ) as mock_vector_store,
+    ):
         index = backend.build(
             file_name="source.csv",
-            vectoriser=vectoriser,
+            embedding_model_name="other",
             output_dir="vector_store",
         )
 
     assert index.num_vectors == EXPECTED_BUILT_VECTOR_COUNT
+    mock_build_vectoriser.assert_called_once_with(embedding_model_name="other")
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
         data_type="csv",
@@ -95,12 +111,19 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
     )
     backend = ClassifaiVectorBackend()
 
-    with patch(
-        "survey_assist_embed_core.adapters.classifai.vector_backend."
-        "VectorStore.from_filespace",
-        return_value=fake_store,
+    with (
+        patch.object(
+            backend,
+            "_build_vectoriser",
+            return_value=object(),
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
+        ),
     ):
-        index = backend.load(folder_path=folder_path, vectoriser=object())
+        index = backend.load(folder_path=folder_path, embedding_model_name="other")
 
     results = index.search("dog", limit=EXPECTED_SEARCH_LIMIT)
 
