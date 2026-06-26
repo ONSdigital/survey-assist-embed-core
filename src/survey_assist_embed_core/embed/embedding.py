@@ -70,13 +70,14 @@ class ChromaDBesqueHFVectoriser(HuggingFaceVectoriser):
 class EmbeddingHandler:
     """Handle embedding operations for a vector-store backend."""
 
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
+    # pylint: disable-next=too-many-arguments
     def __init__(  # noqa: PLR0913
         self,
         embedding_model_name: str = DEFAULT_EMBEDDING_MODEL_NAME,
         db_dir: str = DEFAULT_DB_DIR,
         k_matches: int = DEFAULT_K_MATCHES,
         index_source_file: str | None = None,
+        *,
         backend: VectorBackend | None = None,
         artifact_store: ArtifactStore | None = None,
         storage: Storage | None = None,
