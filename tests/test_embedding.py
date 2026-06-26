@@ -139,7 +139,7 @@ def test_embedding_handler_init_sets_index_size(tmp_path: Path) -> None:
 def test_embedding_handler_init_keeps_falsey_explicit_dependencies(
     tmp_path: Path,
 ) -> None:
-    class _FalseyDependency:
+    class _FalseyDependency:  # pylint: disable=too-few-public-methods
         def __bool__(self) -> bool:
             return False
 
@@ -417,7 +417,8 @@ def test_load_existing_vector_store_gcs() -> None:
 
         with (
             patch(
-                "survey_assist_embed_core.adapters.storage.local_gcs.download_vector_store_from_gcs",
+                "survey_assist_embed_core.adapters.storage.local_gcs."
+                "download_vector_store_from_gcs",
                 return_value=downloaded,
             ) as mock_download,
         ):
@@ -462,7 +463,8 @@ def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error(
 
         with (
             patch(
-                "survey_assist_embed_core.adapters.storage.local_gcs.download_vector_store_from_gcs",
+                "survey_assist_embed_core.adapters.storage.local_gcs."
+                "download_vector_store_from_gcs",
                 return_value=downloaded,
             ),
             pytest.raises(

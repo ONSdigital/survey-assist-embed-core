@@ -299,7 +299,7 @@ def test_local_gcs_storage_downloads_remote_store(tmp_path: Path) -> None:
         resolved_path = storage.resolve_store_path(path="gs://my-bucket/prefix")
 
     assert resolved_path == downloaded.path
-    assert storage._downloads == [downloaded]
+    assert storage._downloads == [downloaded]  # pylint: disable=protected-access
     mock_download.assert_called_once_with("gs://my-bucket/prefix")
 
 
@@ -319,5 +319,5 @@ def test_local_gcs_storage_downloads_remote_source_file(tmp_path: Path) -> None:
         resolved_path = storage.resolve_source_file(path="gs://my-bucket/data.csv")
 
     assert resolved_path == downloaded.path
-    assert storage._downloads == [downloaded]
+    assert storage._downloads == [downloaded]  # pylint: disable=protected-access
     mock_download.assert_called_once_with("gs://my-bucket/data.csv")

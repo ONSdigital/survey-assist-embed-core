@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from survey_assist_embed_core.adapters.classifai import ClassifaiArtifactStore
 
 
@@ -32,14 +34,10 @@ def test_classifai_artifact_store_error_uses_configured_layout_names(
     folder_path = tmp_path / "vector_store"
     folder_path.mkdir()
 
-    try:
+    with pytest.raises(FileNotFoundError) as exc_info:
         artifact_store.ensure_persisted_vector_store(folder_path=str(folder_path))
-    except FileNotFoundError as exc:
-        message = str(exc)
-    else:
-        raise AssertionError("Expected FileNotFoundError")
 
-    assert "store-metadata.json, store-vectors.parquet" in message
+    assert "store-metadata.json, store-vectors.parquet" in str(exc_info.value)
 
 
 def test_classifai_artifact_store_reads_and_writes_source_file(
