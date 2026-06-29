@@ -16,7 +16,6 @@ from survey_assist_embed_core.adapters.classifai import (
     ClassifaiVectorBackend,
     NormalisedHFVectoriser,
 )
-from survey_assist_embed_core.adapters.storage import LocalGcsStorage
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
 from survey_assist_embed_core.embed import EmbeddingHandler
 from survey_assist_embed_core.models import (
@@ -113,7 +112,6 @@ def test_embedding_handler_init_keeps_falsey_explicit_dependencies(
 
     built_store = SimpleNamespace(num_vectors=EXPECTED_TOY_INDEX_SIZE)
     backend = _FalseyDependency()
-    storage = _FalseyDependency()
 
     with patch(
         "survey_assist_embed_core.embed.embedding."
@@ -123,11 +121,9 @@ def test_embedding_handler_init_keeps_falsey_explicit_dependencies(
         handler = EmbeddingHandler(
             db_dir=str(tmp_path / "vector_store"),
             backend=backend,
-            storage=storage,
         )
 
     assert handler._backend is backend
-    assert handler._storage is storage
 
 
 def test_search_index(embedding_handler_search: EmbeddingHandler) -> None:
@@ -266,7 +262,6 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
     handler.db_dir = str(db_dir)
     handler._backend = SimpleNamespace(load=MagicMock())
-    handler._storage = LocalGcsStorage()
 
     fake_store = SimpleNamespace(num_vectors=42)
     handler._backend.load.return_value = (fake_store, "source.csv")
@@ -289,7 +284,6 @@ def test_load_existing_vector_store_local_missing_files(tmp_path: Path) -> None:
     handler._backend = SimpleNamespace(
         load=MagicMock(side_effect=FileNotFoundError("No persisted vector store found"))
     )
-    handler._storage = LocalGcsStorage()
 
     with pytest.raises(FileNotFoundError, match="No persisted vector store found"):
         handler._load_existing_vector_store()
@@ -311,7 +305,6 @@ def test_load_existing_vector_store_error_uses_artifact_store_names(
             )
         )
     )
-    handler._storage = LocalGcsStorage()
 
     with pytest.raises(
         FileNotFoundError,
@@ -329,7 +322,6 @@ def test_load_existing_vector_store_gcs() -> None:
     handler = EmbeddingHandler.__new__(EmbeddingHandler)
     handler.db_dir = "gs://my-bucket/prefix"
     handler._backend = SimpleNamespace(load=MagicMock())
-    handler._storage = LocalGcsStorage()
 
     fake_store = SimpleNamespace(num_vectors=55)
     handler._backend.load.return_value = (fake_store, None)
@@ -339,16 +331,13 @@ def test_load_existing_vector_store_gcs() -> None:
         Path(temp_dir, "vectors.parquet").write_text("dummy", encoding="utf-8")
         downloaded = DownloadedVectorStore(
             path=temp_dir,
-            temp_dir=SimpleNamespace(name=temp_dir),
+            temp_dir=SimpleNamespace(name=temp_dir, cleanup=lambda: None),
         )
 
-        with (
-            patch(
-                "survey_assist_embed_core.adapters.storage.local_gcs."
-                "download_vector_store_from_gcs",
-                return_value=downloaded,
-            ) as mock_download,
-        ):
+        with patch(
+            "survey_assist_embed_core.embed.embedding.download_vector_store_from_gcs",
+            return_value=downloaded,
+        ) as mock_download:
             result = handler._load_existing_vector_store()
 
     assert result == (fake_store, None)
@@ -364,7 +353,6 @@ def test_load_existing_vector_store_raises_when_dir_missing(tmp_path: Path) -> N
     handler._backend = SimpleNamespace(
         load=MagicMock(side_effect=FileNotFoundError("No persisted vector store found"))
     )
-    handler._storage = LocalGcsStorage()
 
     with pytest.raises(FileNotFoundError, match="No persisted vector store found"):
         handler._load_existing_vector_store()
@@ -383,19 +371,17 @@ def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error(
             )
         )
     )
-    handler._storage = LocalGcsStorage()
 
     with tempfile.TemporaryDirectory() as temp_dir:
         Path(temp_dir, "metadata.json").write_text("{}", encoding="utf-8")
         downloaded = DownloadedVectorStore(
             path=temp_dir,
-            temp_dir=SimpleNamespace(name=temp_dir),
+            temp_dir=SimpleNamespace(name=temp_dir, cleanup=lambda: None),
         )
 
         with (
             patch(
-                "survey_assist_embed_core.adapters.storage.local_gcs."
-                "download_vector_store_from_gcs",
+                "survey_assist_embed_core.embed.embedding.download_vector_store_from_gcs",
                 return_value=downloaded,
             ),
             pytest.raises(

@@ -8,13 +8,16 @@ from typing import cast
 from autocorrect import Speller
 
 from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
-from survey_assist_embed_core.adapters.storage import LocalGcsStorage
+from survey_assist_embed_core.adapters.storage.gcs import (
+    download_vector_store_from_gcs,
+    is_gcs_path,
+)
 from survey_assist_embed_core.models import (
     EmbeddingStatus,
     SearchIndexItem,
     SearchIndexResponse,
 )
-from survey_assist_embed_core.ports import Storage, VectorBackend, VectorIndex
+from survey_assist_embed_core.ports import VectorBackend, VectorIndex
 
 DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
@@ -31,13 +34,11 @@ class EmbeddingHandler:
         k_matches: int = DEFAULT_K_MATCHES,
         *,
         backend: VectorBackend | None = None,
-        storage: Storage | None = None,
     ):
         """Initialise the handler for a pre-built vector store."""
         self.k_matches = k_matches
         self.db_dir = db_dir
         self._backend = backend if backend is not None else ClassifaiVectorBackend()
-        self._storage = storage if storage is not None else LocalGcsStorage()
 
         self.spell = Speller()
 
@@ -56,10 +57,20 @@ class EmbeddingHandler:
     def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
         """Load an existing vector store from a local folder or a GCS URI."""
         logger.info("Loading existing vector store from %s", self.db_dir)
-        db_dir = self._storage.resolve_store_path(path=self.db_dir)
+        if is_gcs_path(self.db_dir):
+            with download_vector_store_from_gcs(self.db_dir) as downloaded:
+                return self._load_vector_store_from_path(folder_path=downloaded.path)
 
+        return self._load_vector_store_from_path(folder_path=self.db_dir)
+
+    def _load_vector_store_from_path(
+        self, *, folder_path: str
+    ) -> tuple[VectorIndex, str | None]:
+        """Load a vector store from an already-resolved local folder path."""
         try:
-            vector_store, index_source_file = self._backend.load(folder_path=db_dir)
+            vector_store, index_source_file = self._backend.load(
+                folder_path=folder_path
+            )
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"{exc} Build the vector-store artifacts before initialising "

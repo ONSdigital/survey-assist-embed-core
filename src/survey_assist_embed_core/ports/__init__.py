@@ -1,10 +1,9 @@
-"""Ports for retrieval backends and storage."""
+"""Ports for retrieval backends."""
 
-from survey_assist_embed_core.ports.storage import Storage
 from survey_assist_embed_core.ports.vector_backend import (
     SearchRow,
     VectorBackend,
     VectorIndex,
 )
 
-__all__ = ["SearchRow", "Storage", "VectorBackend", "VectorIndex"]
+__all__ = ["SearchRow", "VectorBackend", "VectorIndex"]

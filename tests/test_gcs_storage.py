@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +15,6 @@ from survey_assist_embed_core.adapters.storage.gcs import (
     is_gcs_path,
     parse_gcs_uri,
 )
-from survey_assist_embed_core.adapters.storage.local_gcs import LocalGcsStorage
 
 NON_GCS_PATH = "local/path"
 
@@ -299,52 +297,3 @@ def test_download_one_file_from_gcs_missing_file() -> None:
         ),
     ):
         download_one_file_from_gcs("gs://my-bucket/path/to/data.csv")
-
-
-@pytest.mark.utils
-def test_local_gcs_storage_returns_local_paths() -> None:
-    """Local paths should pass through unchanged."""
-    storage = LocalGcsStorage()
-
-    assert storage.resolve_store_path(path=NON_GCS_PATH) == NON_GCS_PATH
-    assert storage.resolve_source_file(path=NON_GCS_PATH) == NON_GCS_PATH
-
-
-@pytest.mark.utils
-def test_local_gcs_storage_downloads_remote_store(tmp_path: Path) -> None:
-    """A remote store path should be downloaded and retained by the adapter."""
-    downloaded = DownloadedVectorStore(
-        path=str(tmp_path / "downloaded-store"),
-        temp_dir=SimpleNamespace(name=str(tmp_path / "downloaded-store")),
-    )
-    storage = LocalGcsStorage()
-
-    with patch(
-        "survey_assist_embed_core.adapters.storage.local_gcs.download_vector_store_from_gcs",
-        return_value=downloaded,
-    ) as mock_download:
-        resolved_path = storage.resolve_store_path(path="gs://my-bucket/prefix")
-
-    assert resolved_path == downloaded.path
-    assert storage._downloads == [downloaded]  # pylint: disable=protected-access
-    mock_download.assert_called_once_with("gs://my-bucket/prefix")
-
-
-@pytest.mark.utils
-def test_local_gcs_storage_downloads_remote_source_file(tmp_path: Path) -> None:
-    """A remote source file should be downloaded and retained by the adapter."""
-    downloaded = DownloadedVectorStore(
-        path=str(tmp_path / "data.csv"),
-        temp_dir=SimpleNamespace(name=str(tmp_path)),
-    )
-    storage = LocalGcsStorage()
-
-    with patch(
-        "survey_assist_embed_core.adapters.storage.local_gcs.download_one_file_from_gcs",
-        return_value=downloaded,
-    ) as mock_download:
-        resolved_path = storage.resolve_source_file(path="gs://my-bucket/data.csv")
-
-    assert resolved_path == downloaded.path
-    assert storage._downloads == [downloaded]  # pylint: disable=protected-access
-    mock_download.assert_called_once_with("gs://my-bucket/data.csv")
