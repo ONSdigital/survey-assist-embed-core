@@ -125,9 +125,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
             embedding_model_name="other",
         )
 
-    mock_build_vectoriser.assert_called_once_with(
-        model_name="sentence-transformers/other"
-    )
+    mock_build_vectoriser.assert_called_once_with(model_name="other")
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
         data_type="csv",
@@ -216,7 +214,31 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
 
     assert first is fake_vectoriser
     assert second is fake_vectoriser
-    mock_vectoriser.assert_called_once_with(model_name="sentence-transformers/other")
+    mock_vectoriser.assert_called_once_with(model_name="other")
+
+
+def test_classifai_vector_backend_set_embedding_model_name_noops_when_unchanged() -> (
+    None
+):
+    backend = ClassifaiVectorBackend()
+    fake_vectoriser = object()
+    backend._embedding_model_name = "other"
+    backend._vectoriser = fake_vectoriser
+
+    backend._set_embedding_model_name("other")
+
+    assert backend._embedding_model_name == "other"
+    assert backend._vectoriser is fake_vectoriser
+
+
+def test_classifai_vector_backend_get_vectoriser_requires_loaded_model_name() -> None:
+    backend = ClassifaiVectorBackend()
+
+    with pytest.raises(
+        ValueError,
+        match="embedding_model_name must be loaded from persisted metadata",
+    ):
+        backend._get_vectoriser()
 
 
 def test_classifai_vector_backend_load_requires_embedding_model_metadata(
