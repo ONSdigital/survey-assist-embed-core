@@ -4,6 +4,7 @@ import numpy as np
 from classifai.vectorisers import HuggingFaceVectoriser
 
 
+# pylint: disable-next=too-few-public-methods
 class NormalisedHFVectoriser(HuggingFaceVectoriser):
     """Normalise HuggingFace vectors to unit length after embedding."""
 
