@@ -8,12 +8,17 @@ from classifai.indexers import (
     VectorStoreSearchOutput,
 )
 
-from survey_assist_embed_core.adapters.classifai.artifacts import ClassifaiArtifactStore
+from survey_assist_embed_core.adapters.classifai.artifacts import (
+    ensure_persisted_vector_store,
+    has_persisted_vectors_file,
+    read_index_source_file,
+    write_index_source_file,
+)
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
     NormalisedHFVectoriser,
 )
 from survey_assist_embed_core.models import VectorBackendConfig
-from survey_assist_embed_core.ports import ArtifactStore, SearchRow, VectorIndex
+from survey_assist_embed_core.ports import SearchRow, VectorIndex
 
 DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
@@ -47,14 +52,10 @@ class ClassifaiVectorBackend:
         self,
         *,
         embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
-        artifact_store: ArtifactStore | None = None,
     ):
         """Store the embedding model used to construct ClassifAI vectorisers."""
         self._embedding_model_name = embedding_model_name
         self._vectoriser: NormalisedHFVectoriser | None = None
-        self._artifact_store = (
-            artifact_store if artifact_store is not None else ClassifaiArtifactStore()
-        )
 
     @property
     def config(self) -> VectorBackendConfig:
@@ -76,20 +77,18 @@ class ClassifaiVectorBackend:
 
     def has_persisted_store(self, *, folder_path: str) -> bool:
         """Return whether persisted ClassifAI vector-store files already exist."""
-        return self._artifact_store.has_persisted_vectors_file(folder_path=folder_path)
+        return has_persisted_vectors_file(folder_path=folder_path)
 
     def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
         """Load a ClassifAI vector store from filespace."""
-        self._artifact_store.ensure_persisted_vector_store(folder_path=folder_path)
+        ensure_persisted_vector_store(folder_path=folder_path)
         vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
             folder_path=folder_path,
             vectoriser=vectoriser,
             hooks=None,
         )
-        index_source_file = self._artifact_store.read_index_source_file(
-            folder_path=folder_path,
-        )
+        index_source_file = read_index_source_file(folder_path=folder_path)
         return _ClassifaiVectorIndex(store), index_source_file
 
     def build(
@@ -111,7 +110,7 @@ class ClassifaiVectorBackend:
             overwrite=True,
             hooks=None,
         )
-        self._artifact_store.write_index_source_file(
+        write_index_source_file(
             folder_path=output_dir,
             index_source_file=index_source_file,
         )

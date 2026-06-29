@@ -25,20 +25,17 @@ logger = logging.getLogger(__name__)
 class EmbeddingHandler:
     """Handle embedding operations for a vector-store backend."""
 
-    # pylint: disable-next=too-many-arguments
     def __init__(
         self,
         db_dir: str = DEFAULT_DB_DIR,
         k_matches: int = DEFAULT_K_MATCHES,
-        index_source_file: str | None = None,
         *,
         backend: VectorBackend | None = None,
         storage: Storage | None = None,
     ):
-        """Initialise the handler for an existing or newly built vector store."""
+        """Initialise the handler for a pre-built vector store."""
         self.k_matches = k_matches
         self.db_dir = db_dir
-        self.index_source_file = index_source_file
         self._backend = backend if backend is not None else ClassifaiVectorBackend()
         self._storage = storage if storage is not None else LocalGcsStorage()
 
@@ -46,13 +43,7 @@ class EmbeddingHandler:
 
         self.spell = Speller()
 
-        self.vector_store: VectorIndex
-        if not self.index_source_file:
-            self.vector_store, self.index_source_file = (
-                self._load_existing_vector_store()
-            )
-        else:
-            self.vector_store = self._build_vector_store()
+        self.vector_store, self.index_source_file = self._load_existing_vector_store()
 
         self.index_size = (
             self.vector_store.num_vectors if self.vector_store.num_vectors else 0
@@ -71,46 +62,12 @@ class EmbeddingHandler:
             vector_store, index_source_file = self._backend.load(folder_path=db_dir)
         except FileNotFoundError as exc:
             raise FileNotFoundError(
-                f"{exc} Or provide a valid index source file."
+                f"{exc} Build the vector-store artifacts before initialising "
+                f"EmbeddingHandler."
             ) from exc
 
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
         return vector_store, index_source_file
-
-    def _build_vector_store(self) -> VectorIndex:
-        """Build persisted artifacts, then load the resulting vector store."""
-        if not self.db_dir:
-            raise ValueError("db_dir must be provided.")
-
-        index_source_file = str(self.index_source_file)
-        logger.info(
-            "Building vector store in %s from source file %s.",
-            self.db_dir,
-            index_source_file,
-        )
-
-        if self._backend.has_persisted_store(folder_path=self.db_dir):
-            logger.warning(
-                "Existing vector store files found in %s. They will be overwritten.",
-                self.db_dir,
-            )
-
-        index_source_file = self._storage.resolve_source_file(path=index_source_file)
-
-        self._backend.build(
-            file_name=index_source_file,
-            output_dir=self.db_dir,
-            index_source_file=self.index_source_file,
-        )
-        vector_store, _ = self._backend.load(folder_path=self.db_dir)
-
-        logger.info(
-            "Vector store built successfully in %s with data from %s.",
-            self.db_dir,
-            self.index_source_file,
-        )
-
-        return vector_store
 
     def search_index(self, query: str) -> SearchIndexResponse:
         """Return the nearest index entries for a query string."""

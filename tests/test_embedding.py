@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -318,7 +317,8 @@ def test_load_existing_vector_store_error_uses_artifact_store_names(
         match=(
             r"No persisted vector store found .*"
             r"store-metadata\.json, store-vectors\.parquet.*"
-            r"Or provide a valid index source file\."
+            r"Build the vector-store artifacts before initialising "
+            r"EmbeddingHandler\."
         ),
     ):
         handler._load_existing_vector_store()
@@ -401,138 +401,12 @@ def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error(
                 FileNotFoundError,
                 match=(
                     r"Required persisted artifacts: metadata\.json, vectors\.parquet.*"
-                    r"Or provide a valid index source file\."
+                    r"Build the vector-store artifacts before initialising "
+                    r"EmbeddingHandler\."
                 ),
             ),
         ):
             handler._load_existing_vector_store()
-
-
-def test_build_vector_store_raises_when_db_dir_missing() -> None:
-    handler = EmbeddingHandler.__new__(EmbeddingHandler)
-    handler.db_dir = None
-    handler._backend = SimpleNamespace(
-        build=MagicMock(),
-        has_persisted_store=MagicMock(),
-    )
-    handler._storage = LocalGcsStorage()
-
-    with pytest.raises(ValueError, match="db_dir must be provided"):
-        handler._build_vector_store()
-
-
-def test_build_vector_store_calls_backend_with_resolved_inputs(tmp_path: Path) -> None:
-    db_dir = tmp_path / "vector_store"
-    db_dir.mkdir()
-    handler = EmbeddingHandler.__new__(EmbeddingHandler)
-    handler.db_dir = str(db_dir)
-    handler.index_source_file = "some-file.csv"
-    handler._backend = SimpleNamespace(
-        build=MagicMock(),
-        load=MagicMock(),
-        has_persisted_store=MagicMock(return_value=False),
-    )
-    handler._storage = LocalGcsStorage()
-
-    built_store = SimpleNamespace(num_vectors=1)
-    handler._backend.load.return_value = (built_store, "some-file.csv")
-
-    result = handler._build_vector_store()
-
-    assert result is built_store
-    handler._backend.has_persisted_store.assert_called_once_with(
-        folder_path=str(db_dir)
-    )
-    handler._backend.build.assert_called_once_with(
-        file_name="some-file.csv",
-        output_dir=str(db_dir),
-        index_source_file="some-file.csv",
-    )
-    handler._backend.load.assert_called_once_with(folder_path=str(db_dir))
-
-
-def test_build_vector_store_uses_downloaded_gcs_source_file(tmp_path: Path) -> None:
-    db_dir = tmp_path / "vector_store"
-    db_dir.mkdir()
-    downloaded_csv = tmp_path / "downloaded.csv"
-    downloaded_csv.write_text("doc", encoding="utf-8")
-
-    handler = EmbeddingHandler.__new__(EmbeddingHandler)
-    handler.db_dir = str(db_dir)
-    handler.index_source_file = "gs://my-bucket/data.csv"
-    handler._backend = SimpleNamespace(
-        build=MagicMock(),
-        load=MagicMock(),
-        has_persisted_store=MagicMock(return_value=False),
-    )
-    handler._storage = LocalGcsStorage()
-
-    downloaded = DownloadedVectorStore(
-        path=str(downloaded_csv),
-        temp_dir=SimpleNamespace(name=str(tmp_path)),
-    )
-    built_store = SimpleNamespace(num_vectors=1)
-    handler._backend.load.return_value = (built_store, "gs://my-bucket/data.csv")
-
-    with (
-        patch(
-            "survey_assist_embed_core.adapters.storage.local_gcs.download_one_file_from_gcs",
-            return_value=downloaded,
-        ) as mock_download,
-    ):
-        handler._build_vector_store()
-
-    mock_download.assert_called_once_with("gs://my-bucket/data.csv")
-    assert handler._backend.build.call_args.kwargs == {
-        "file_name": str(downloaded_csv),
-        "output_dir": str(db_dir),
-        "index_source_file": "gs://my-bucket/data.csv",
-    }
-    handler._backend.load.assert_called_once_with(folder_path=str(db_dir))
-
-
-def test_build_vector_store_logs_warning_when_parquet_exists(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    db_dir = tmp_path / "vector_store"
-    db_dir.mkdir()
-    (db_dir / "vectors.parquet").write_text("dummy", encoding="utf-8")
-
-    handler = EmbeddingHandler.__new__(EmbeddingHandler)
-    handler.db_dir = str(db_dir)
-    handler.index_source_file = "some-file.csv"
-    handler._backend = SimpleNamespace(
-        build=MagicMock(),
-        load=MagicMock(),
-        has_persisted_store=MagicMock(return_value=True),
-    )
-    handler._storage = LocalGcsStorage()
-
-    built_store = SimpleNamespace(num_vectors=1)
-    handler._backend.load.return_value = (built_store, "some-file.csv")
-
-    with caplog.at_level(
-        logging.WARNING, logger="survey_assist_embed_core.embed.embedding"
-    ):
-        handler._build_vector_store()
-
-    assert any("overwritten" in record.message for record in caplog.records)
-
-
-def test_embedding_handler_builds_vector_store_from_source(tmp_path: Path) -> None:
-    built_store = SimpleNamespace(num_vectors=2)
-
-    with patch(
-        "survey_assist_embed_core.embed.embedding.EmbeddingHandler._build_vector_store",
-        return_value=built_store,
-    ) as mock_build:
-        handler = EmbeddingHandler(
-            db_dir=str(tmp_path / "vector_store"),
-            index_source_file="some-source.csv",
-        )
-
-    assert handler.vector_store is built_store
-    mock_build.assert_called_once()
 
 
 def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
