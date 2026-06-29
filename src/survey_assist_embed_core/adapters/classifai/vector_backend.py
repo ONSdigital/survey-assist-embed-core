@@ -9,7 +9,7 @@ from classifai.indexers import (
 )
 
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
-    ChromaDBesqueHFVectoriser,
+    NormalisedHFVectoriser,
 )
 from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
@@ -49,6 +49,7 @@ class ClassifaiVectorBackend:
     ):
         """Store the embedding model used to construct ClassifAI vectorisers."""
         self._embedding_model_name = embedding_model_name
+        self._vectoriser: NormalisedHFVectoriser | None = None
 
     @property
     def config(self) -> VectorBackendConfig:
@@ -58,15 +59,19 @@ class ClassifaiVectorBackend:
             settings={"embedding_model_name": self._embedding_model_name},
         )
 
-    def _build_vectoriser(self) -> ChromaDBesqueHFVectoriser:
-        """Build the default ClassifAI vectoriser for an embedding model."""
-        return ChromaDBesqueHFVectoriser(
-            model_name=f"sentence-transformers/{self._embedding_model_name}"
-        )
+    def _get_vectoriser(self) -> NormalisedHFVectoriser:
+        """Build and cache the default ClassifAI vectoriser."""
+        vectoriser = self._vectoriser
+        if vectoriser is None:
+            vectoriser = NormalisedHFVectoriser(
+                model_name=f"sentence-transformers/{self._embedding_model_name}"
+            )
+            self._vectoriser = vectoriser
+        return vectoriser
 
     def load(self, *, folder_path: str) -> VectorIndex:
         """Load a ClassifAI vector store from filespace."""
-        vectoriser = self._build_vectoriser()
+        vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
             folder_path=folder_path,
             vectoriser=vectoriser,
@@ -76,7 +81,7 @@ class ClassifaiVectorBackend:
 
     def build(self, *, file_name: str, output_dir: str) -> VectorIndex:
         """Build a ClassifAI vector store from a CSV source file."""
-        vectoriser = self._build_vectoriser()
+        vectoriser = self._get_vectoriser()
         store = VectorStore(
             file_name=file_name,
             data_type="csv",

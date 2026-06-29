@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring
+# pylint: disable=missing-function-docstring, protected-access
 """Tests for the ClassifAI vector backend adapter."""
 
 from __future__ import annotations
@@ -137,3 +137,20 @@ def test_classifai_vector_backend_config_reports_model_name() -> None:
 
     assert backend.config.backend_name == "classifai"
     assert backend.config.settings == {"embedding_model_name": "other"}
+
+
+def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
+    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    fake_vectoriser = object()
+
+    with patch(
+        "survey_assist_embed_core.adapters.classifai.vector_backend."
+        "ChromaDBesqueHFVectoriser",
+        return_value=fake_vectoriser,
+    ) as mock_vectoriser:
+        first = backend._get_vectoriser()
+        second = backend._get_vectoriser()
+
+    assert first is fake_vectoriser
+    assert second is fake_vectoriser
+    mock_vectoriser.assert_called_once_with(model_name="sentence-transformers/other")

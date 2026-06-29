@@ -5,11 +5,11 @@ from survey_assist_embed_core.adapters.classifai.vector_backend import (
     ClassifaiVectorBackend,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
-    ChromaDBesqueHFVectoriser,
+    NormalisedHFVectoriser,
 )
 
 __all__ = [
-    "ChromaDBesqueHFVectoriser",
     "ClassifaiArtifactStore",
     "ClassifaiVectorBackend",
+    "NormalisedHFVectoriser",
 ]

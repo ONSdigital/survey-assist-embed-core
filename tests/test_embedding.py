@@ -14,9 +14,9 @@ import numpy as np
 import pytest
 
 from survey_assist_embed_core.adapters.classifai import (
-    ChromaDBesqueHFVectoriser,
     ClassifaiArtifactStore,
     ClassifaiVectorBackend,
+    NormalisedHFVectoriser,
 )
 from survey_assist_embed_core.adapters.storage import LocalGcsStorage
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
@@ -581,7 +581,7 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
 
 
 def test_chromadbesque_normalize_unit_vectors() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[3.0, 4.0], [1.0, 0.0]])
     result = inst._normalize(vectors)
 
@@ -589,7 +589,7 @@ def test_chromadbesque_normalize_unit_vectors() -> None:
 
 
 def test_chromadbesque_normalize_zero_vectors_do_not_divide_by_zero() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[0.0, 0.0], [1.0, 0.0]])
     result = inst._normalize(vectors)
 
@@ -598,7 +598,7 @@ def test_chromadbesque_normalize_zero_vectors_do_not_divide_by_zero() -> None:
 
 
 def test_chromadbesque_transform_single_string_wraps_in_list() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     fake_vec = np.array([[1.0, 0.0]])
 
     with patch(
@@ -612,7 +612,7 @@ def test_chromadbesque_transform_single_string_wraps_in_list() -> None:
 
 
 def test_chromadbesque_transform_list_passes_through() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     fake_vec = np.array([[1.0, 0.0], [0.0, 1.0]])
 
     with patch(
@@ -626,7 +626,7 @@ def test_chromadbesque_transform_list_passes_through() -> None:
 
 
 def test_chromadbesque_embed_documents_returns_list_vectors() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     fake_vec = np.array([[1.0, 0.0], [0.0, 1.0]])
 
     with patch.object(inst, "transform", return_value=fake_vec) as mock_transform:
@@ -637,7 +637,7 @@ def test_chromadbesque_embed_documents_returns_list_vectors() -> None:
 
 
 def test_chromadbesque_embed_query_returns_first_vector() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     fake_vec = np.array([[0.25, 0.75]])
 
     with patch.object(inst, "transform", return_value=fake_vec) as mock_transform:
@@ -648,7 +648,7 @@ def test_chromadbesque_embed_query_returns_first_vector() -> None:
 
 
 def test_chromadbesque_async_embed_helpers_delegate() -> None:
-    inst = ChromaDBesqueHFVectoriser.__new__(ChromaDBesqueHFVectoriser)
+    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
 
     with (
         patch.object(inst, "embed_documents", return_value=[[1.0, 0.0]]) as mock_docs,
