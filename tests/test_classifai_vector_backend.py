@@ -43,7 +43,7 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
     with (
         patch.object(
             backend,
-            "_build_vectoriser",
+            "_get_vectoriser",
             return_value=vectoriser,
         ) as mock_build_vectoriser,
         patch(
@@ -74,7 +74,7 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
     with (
         patch.object(
             backend,
-            "_build_vectoriser",
+            "_get_vectoriser",
             return_value=vectoriser,
         ) as mock_build_vectoriser,
         patch(
@@ -113,7 +113,7 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
     with (
         patch.object(
             backend,
-            "_build_vectoriser",
+            "_get_vectoriser",
             return_value=object(),
         ),
         patch(
@@ -145,7 +145,7 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
 
     with patch(
         "survey_assist_embed_core.adapters.classifai.vector_backend."
-        "ChromaDBesqueHFVectoriser",
+        "NormalisedHFVectoriser",
         return_value=fake_vectoriser,
     ) as mock_vectoriser:
         first = backend._get_vectoriser()

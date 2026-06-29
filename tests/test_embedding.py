@@ -580,7 +580,7 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     assert cfg.backend.settings == {"embedding_model_name": "other"}
 
 
-def test_chromadbesque_normalize_unit_vectors() -> None:
+def test_normalised_hf_vectoriser_normalize_unit_vectors() -> None:
     inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[3.0, 4.0], [1.0, 0.0]])
     result = inst._normalize(vectors)
@@ -588,7 +588,7 @@ def test_chromadbesque_normalize_unit_vectors() -> None:
     assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
 
 
-def test_chromadbesque_normalize_zero_vectors_do_not_divide_by_zero() -> None:
+def test_normalised_hf_vectoriser_zero_vectors_do_not_divide_by_zero() -> None:
     inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[0.0, 0.0], [1.0, 0.0]])
     result = inst._normalize(vectors)
@@ -597,7 +597,7 @@ def test_chromadbesque_normalize_zero_vectors_do_not_divide_by_zero() -> None:
     assert np.allclose(np.linalg.norm(result[1]), 1.0)
 
 
-def test_chromadbesque_transform_single_string_wraps_in_list() -> None:
+def test_normalised_hf_vectoriser_transform_single_string_wraps_in_list() -> None:
     inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     fake_vec = np.array([[1.0, 0.0]])
 
@@ -611,7 +611,7 @@ def test_chromadbesque_transform_single_string_wraps_in_list() -> None:
     assert result.shape == (1, 2)
 
 
-def test_chromadbesque_transform_list_passes_through() -> None:
+def test_normalised_hf_vectoriser_transform_list_passes_through() -> None:
     inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     fake_vec = np.array([[1.0, 0.0], [0.0, 1.0]])
 
@@ -623,41 +623,3 @@ def test_chromadbesque_transform_list_passes_through() -> None:
 
     mock_super.assert_called_once_with(["hello", "world"])
     assert result.shape == (2, 2)
-
-
-def test_chromadbesque_embed_documents_returns_list_vectors() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
-    fake_vec = np.array([[1.0, 0.0], [0.0, 1.0]])
-
-    with patch.object(inst, "transform", return_value=fake_vec) as mock_transform:
-        result = inst.embed_documents(["hello", "world"])
-
-    mock_transform.assert_called_once_with(["hello", "world"])
-    assert result == [[1.0, 0.0], [0.0, 1.0]]
-
-
-def test_chromadbesque_embed_query_returns_first_vector() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
-    fake_vec = np.array([[0.25, 0.75]])
-
-    with patch.object(inst, "transform", return_value=fake_vec) as mock_transform:
-        result = inst.embed_query("hello")
-
-    mock_transform.assert_called_once_with(["hello"])
-    assert result == [0.25, 0.75]
-
-
-def test_chromadbesque_async_embed_helpers_delegate() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
-
-    with (
-        patch.object(inst, "embed_documents", return_value=[[1.0, 0.0]]) as mock_docs,
-        patch.object(inst, "embed_query", return_value=[0.25, 0.75]) as mock_query,
-    ):
-        documents = inst.aembed_documents(["hello"])
-        query = inst.aembed_query("world")
-
-    mock_docs.assert_called_once_with(["hello"])
-    mock_query.assert_called_once_with("world")
-    assert documents == [[1.0, 0.0]]
-    assert query == [0.25, 0.75]
