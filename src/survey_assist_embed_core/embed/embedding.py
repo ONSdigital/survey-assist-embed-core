@@ -8,7 +8,7 @@ from typing import cast
 from autocorrect import Speller
 
 from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
-from survey_assist_embed_core.adapters.storage.gcs import (
+from survey_assist_embed_core.adapters.storage import (
     download_vector_store_from_gcs,
     is_gcs_path,
 )
