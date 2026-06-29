@@ -26,8 +26,17 @@ class VectorBackend(Protocol):
     def config(self) -> VectorBackendConfig:
         """Return typed backend metadata for diagnostics and status output."""
 
-    def load(self, *, folder_path: str) -> VectorIndex:
-        """Load a vector index from a persisted folder."""
+    def has_persisted_store(self, *, folder_path: str) -> bool:
+        """Return whether persisted backend artifacts already exist."""
 
-    def build(self, *, file_name: str, output_dir: str) -> VectorIndex:
-        """Build a vector index from a prepared source file."""
+    def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
+        """Load a vector index and recorded source path from a persisted folder."""
+
+    def build(
+        self,
+        *,
+        file_name: str,
+        output_dir: str,
+        index_source_file: str | None,
+    ) -> None:
+        """Build persisted backend artifacts from a prepared source file."""

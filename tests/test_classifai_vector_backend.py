@@ -7,9 +7,13 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import pytest
 from classifai.indexers import VectorStoreSearchOutput
 
-from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
+from survey_assist_embed_core.adapters.classifai import (
+    ClassifaiArtifactStore,
+    ClassifaiVectorBackend,
+)
 
 EXPECTED_LOADED_VECTOR_COUNT = 42
 EXPECTED_BUILT_VECTOR_COUNT = 7
@@ -32,7 +36,16 @@ def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput
 
 
 def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    artifact_store = SimpleNamespace(
+        ensure_persisted_vector_store=MagicMock(),
+        read_index_source_file=MagicMock(return_value="source.csv"),
+        has_persisted_vectors_file=MagicMock(return_value=True),
+        write_index_source_file=MagicMock(),
+    )
+    backend = ClassifaiVectorBackend(
+        embedding_model_name="other",
+        artifact_store=artifact_store,
+    )
     vectoriser = object()
     folder_path = str(tmp_path / "vector_store")
     fake_store = SimpleNamespace(
@@ -52,10 +65,17 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
             return_value=fake_store,
         ) as mock_from_filespace,
     ):
-        index = backend.load(folder_path=folder_path)
+        index, index_source_file = backend.load(folder_path=folder_path)
 
     assert index.num_vectors == EXPECTED_LOADED_VECTOR_COUNT
+    assert index_source_file == "source.csv"
     mock_build_vectoriser.assert_called_once_with()
+    artifact_store.ensure_persisted_vector_store.assert_called_once_with(
+        folder_path=folder_path,
+    )
+    artifact_store.read_index_source_file.assert_called_once_with(
+        folder_path=folder_path,
+    )
     mock_from_filespace.assert_called_once_with(
         folder_path=folder_path,
         vectoriser=vectoriser,
@@ -64,7 +84,16 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
 
 
 def test_classifai_vector_backend_build_uses_expected_args() -> None:
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    artifact_store = SimpleNamespace(
+        ensure_persisted_vector_store=MagicMock(),
+        read_index_source_file=MagicMock(return_value="source.csv"),
+        has_persisted_vectors_file=MagicMock(return_value=False),
+        write_index_source_file=MagicMock(),
+    )
+    backend = ClassifaiVectorBackend(
+        embedding_model_name="other",
+        artifact_store=artifact_store,
+    )
     vectoriser = object()
     fake_store = SimpleNamespace(
         num_vectors=EXPECTED_BUILT_VECTOR_COUNT,
@@ -82,12 +111,12 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
             return_value=fake_store,
         ) as mock_vector_store,
     ):
-        index = backend.build(
+        backend.build(
             file_name="source.csv",
             output_dir="vector_store",
+            index_source_file="source.csv",
         )
 
-    assert index.num_vectors == EXPECTED_BUILT_VECTOR_COUNT
     mock_build_vectoriser.assert_called_once_with()
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
@@ -99,6 +128,10 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
         overwrite=True,
         hooks=None,
     )
+    artifact_store.write_index_source_file.assert_called_once_with(
+        folder_path="vector_store",
+        index_source_file="source.csv",
+    )
 
 
 def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
@@ -108,7 +141,16 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
         num_vectors=1,
         search=MagicMock(return_value=make_search_output(rows)),
     )
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    artifact_store = SimpleNamespace(
+        ensure_persisted_vector_store=MagicMock(),
+        read_index_source_file=MagicMock(return_value=None),
+        has_persisted_vectors_file=MagicMock(return_value=True),
+        write_index_source_file=MagicMock(),
+    )
+    backend = ClassifaiVectorBackend(
+        embedding_model_name="other",
+        artifact_store=artifact_store,
+    )
 
     with (
         patch.object(
@@ -122,7 +164,7 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
             return_value=fake_store,
         ),
     ):
-        index = backend.load(folder_path=folder_path)
+        index, _ = backend.load(folder_path=folder_path)
 
     results = index.search("dog", limit=EXPECTED_SEARCH_LIMIT)
 
@@ -154,3 +196,37 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
     assert first is fake_vectoriser
     assert second is fake_vectoriser
     mock_vectoriser.assert_called_once_with(model_name="sentence-transformers/other")
+
+
+def test_classifai_vector_backend_has_persisted_store_uses_artifact_store() -> None:
+    artifact_store = SimpleNamespace(
+        ensure_persisted_vector_store=MagicMock(),
+        read_index_source_file=MagicMock(return_value=None),
+        has_persisted_vectors_file=MagicMock(return_value=True),
+        write_index_source_file=MagicMock(),
+    )
+    backend = ClassifaiVectorBackend(artifact_store=artifact_store)
+
+    assert backend.has_persisted_store(folder_path="vector_store") is True
+    artifact_store.has_persisted_vectors_file.assert_called_once_with(
+        folder_path="vector_store",
+    )
+
+
+def test_classifai_vector_backend_load_uses_custom_artifact_layout_names(
+    tmp_path,
+) -> None:
+    class _CustomClassifaiArtifactStore(ClassifaiArtifactStore):
+        METADATA_FILE_NAME = "store-metadata.json"
+        VECTORS_FILE_NAME = "store-vectors.parquet"
+
+    backend = ClassifaiVectorBackend(
+        artifact_store=_CustomClassifaiArtifactStore(),
+    )
+    folder_path = tmp_path / "vector_store"
+    folder_path.mkdir()
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        backend.load(folder_path=str(folder_path))
+
+    assert "store-metadata.json, store-vectors.parquet" in str(exc_info.value)

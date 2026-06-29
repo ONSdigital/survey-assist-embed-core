@@ -7,22 +7,14 @@ from typing import cast
 
 from autocorrect import Speller
 
-from survey_assist_embed_core.adapters.classifai import (
-    ClassifaiArtifactStore,
-    ClassifaiVectorBackend,
-)
+from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
 from survey_assist_embed_core.adapters.storage import LocalGcsStorage
 from survey_assist_embed_core.models import (
     EmbeddingStatus,
     SearchIndexItem,
     SearchIndexResponse,
 )
-from survey_assist_embed_core.ports import (
-    ArtifactStore,
-    Storage,
-    VectorBackend,
-    VectorIndex,
-)
+from survey_assist_embed_core.ports import Storage, VectorBackend, VectorIndex
 
 DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
@@ -34,14 +26,13 @@ class EmbeddingHandler:
     """Handle embedding operations for a vector-store backend."""
 
     # pylint: disable-next=too-many-arguments
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         db_dir: str = DEFAULT_DB_DIR,
         k_matches: int = DEFAULT_K_MATCHES,
         index_source_file: str | None = None,
         *,
         backend: VectorBackend | None = None,
-        artifact_store: ArtifactStore | None = None,
         storage: Storage | None = None,
     ):
         """Initialise the handler for an existing or newly built vector store."""
@@ -49,9 +40,6 @@ class EmbeddingHandler:
         self.db_dir = db_dir
         self.index_source_file = index_source_file
         self._backend = backend if backend is not None else ClassifaiVectorBackend()
-        self._artifact_store = (
-            artifact_store if artifact_store is not None else ClassifaiArtifactStore()
-        )
         self._storage = storage if storage is not None else LocalGcsStorage()
 
         logger.info("Using vector backend config: %s", self._backend.config)
@@ -80,22 +68,17 @@ class EmbeddingHandler:
         db_dir = self._storage.resolve_store_path(path=self.db_dir)
 
         try:
-            self._artifact_store.ensure_persisted_vector_store(folder_path=db_dir)
+            vector_store, index_source_file = self._backend.load(folder_path=db_dir)
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"{exc} Or provide a valid index source file."
             ) from exc
 
-        vector_store = self._backend.load(folder_path=db_dir)
-
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
-        index_source_file = self._artifact_store.read_index_source_file(
-            folder_path=db_dir
-        )
         return vector_store, index_source_file
 
     def _build_vector_store(self) -> VectorIndex:
-        """Build a vector store from a CSV source file."""
+        """Build persisted artifacts, then load the resulting vector store."""
         if not self.db_dir:
             raise ValueError("db_dir must be provided.")
 
@@ -106,7 +89,7 @@ class EmbeddingHandler:
             index_source_file,
         )
 
-        if self._artifact_store.has_persisted_vectors_file(folder_path=self.db_dir):
+        if self._backend.has_persisted_store(folder_path=self.db_dir):
             logger.warning(
                 "Existing vector store files found in %s. They will be overwritten.",
                 self.db_dir,
@@ -114,15 +97,12 @@ class EmbeddingHandler:
 
         index_source_file = self._storage.resolve_source_file(path=index_source_file)
 
-        vector_store = self._backend.build(
+        self._backend.build(
             file_name=index_source_file,
             output_dir=self.db_dir,
-        )
-
-        self._artifact_store.write_index_source_file(
-            folder_path=self.db_dir,
             index_source_file=self.index_source_file,
         )
+        vector_store, _ = self._backend.load(folder_path=self.db_dir)
 
         logger.info(
             "Vector store built successfully in %s with data from %s.",
