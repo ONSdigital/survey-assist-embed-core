@@ -10,8 +10,9 @@ from classifai.indexers import (
 
 from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
-    has_persisted_vectors_file,
+    read_embedding_model_name,
     read_index_source_file,
+    write_embedding_model_name,
     write_index_source_file,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
@@ -20,7 +21,36 @@ from survey_assist_embed_core.adapters.classifai.vectoriser import (
 from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
 
-DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def build_classifai_vector_store_artifacts(
+    *,
+    file_name: str,
+    output_dir: str,
+    index_source_file: str | None,
+    embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
+) -> None:
+    """Build persisted ClassifAI vector-store artifacts from a CSV file."""
+    vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
+    VectorStore(
+        file_name=file_name,
+        data_type="csv",
+        vectoriser=vectoriser,
+        batch_size=8,
+        meta_data=None,
+        output_dir=output_dir,
+        overwrite=True,
+        hooks=None,
+    )
+    write_index_source_file(
+        folder_path=output_dir,
+        index_source_file=index_source_file,
+    )
+    write_embedding_model_name(
+        folder_path=output_dir,
+        embedding_model_name=embedding_model_name,
+    )
 
 
 class _ClassifaiVectorIndex:
@@ -48,13 +78,9 @@ class _ClassifaiVectorIndex:
 class ClassifaiVectorBackend:
     """ClassifAI implementation of the vector backend port."""
 
-    def __init__(
-        self,
-        *,
-        embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
-    ):
-        """Store the embedding model used to construct ClassifAI vectorisers."""
-        self._embedding_model_name = embedding_model_name
+    def __init__(self):
+        """Initialise an unloaded backend waiting for persisted metadata."""
+        self._embedding_model_name: str | None = None
         self._vectoriser: NormalisedHFVectoriser | None = None
 
     @property
@@ -62,26 +88,22 @@ class ClassifaiVectorBackend:
         """Return typed backend metadata for handler status output."""
         return VectorBackendConfig(
             backend_name="classifai",
-            settings={"embedding_model_name": self._embedding_model_name},
+            settings={
+                "embedding_model_name": self._embedding_model_name,
+            },
         )
-
-    def _get_vectoriser(self) -> NormalisedHFVectoriser:
-        """Build and cache the default ClassifAI vectoriser."""
-        vectoriser = self._vectoriser
-        if vectoriser is None:
-            vectoriser = NormalisedHFVectoriser(
-                model_name=f"sentence-transformers/{self._embedding_model_name}"
-            )
-            self._vectoriser = vectoriser
-        return vectoriser
-
-    def has_persisted_store(self, *, folder_path: str) -> bool:
-        """Return whether persisted ClassifAI vector-store files already exist."""
-        return has_persisted_vectors_file(folder_path=folder_path)
 
     def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
         """Load a ClassifAI vector store from filespace."""
         ensure_persisted_vector_store(folder_path=folder_path)
+        embedding_model_name = read_embedding_model_name(folder_path=folder_path)
+        if embedding_model_name is None:
+            raise FileNotFoundError(
+                "No embedding model metadata found in persisted vector store."
+            )
+
+        self._set_embedding_model_name(embedding_model_name)
+
         vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
             folder_path=folder_path,
@@ -91,26 +113,23 @@ class ClassifaiVectorBackend:
         index_source_file = read_index_source_file(folder_path=folder_path)
         return _ClassifaiVectorIndex(store), index_source_file
 
-    def build(
-        self,
-        *,
-        file_name: str,
-        output_dir: str,
-        index_source_file: str | None,
-    ) -> None:
-        """Build persisted ClassifAI vector-store artifacts from a CSV file."""
-        vectoriser = self._get_vectoriser()
-        VectorStore(
-            file_name=file_name,
-            data_type="csv",
-            vectoriser=vectoriser,
-            batch_size=8,
-            meta_data=None,
-            output_dir=output_dir,
-            overwrite=True,
-            hooks=None,
-        )
-        write_index_source_file(
-            folder_path=output_dir,
-            index_source_file=index_source_file,
-        )
+    def _set_embedding_model_name(self, embedding_model_name: str) -> None:
+        """Update the effective embedding model and clear any stale cache."""
+        if self._embedding_model_name == embedding_model_name:
+            return
+
+        self._embedding_model_name = embedding_model_name
+        self._vectoriser = None
+
+    def _get_vectoriser(self) -> NormalisedHFVectoriser:
+        """Build and cache the default ClassifAI vectoriser."""
+        vectoriser = self._vectoriser
+        if vectoriser is None:
+            if self._embedding_model_name is None:
+                raise ValueError(
+                    "embedding_model_name must be loaded from persisted metadata "
+                    "before constructing a query vectoriser."
+                )
+            vectoriser = NormalisedHFVectoriser(model_name=self._embedding_model_name)
+            self._vectoriser = vectoriser
+        return vectoriser

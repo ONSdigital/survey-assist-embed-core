@@ -50,9 +50,20 @@ def test_classifai_artifact_store_reads_and_writes_source_file(
     )
 
 
-def test_classifai_artifact_store_detects_vectors_file(tmp_path: Path) -> None:
+def test_classifai_artifact_store_reads_and_writes_embedding_model_name(
+    tmp_path: Path,
+) -> None:
     folder_path = tmp_path / "vector_store"
     folder_path.mkdir()
-    (folder_path / "vectors.parquet").write_text("dummy", encoding="utf-8")
 
-    assert artifacts.has_persisted_vectors_file(folder_path=str(folder_path))
+    artifacts.write_embedding_model_name(
+        folder_path=str(folder_path),
+        embedding_model_name="all-MiniLM-L6-v2",
+    )
+
+    metadata = json.loads((folder_path / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["embedding_model_name"] == "all-MiniLM-L6-v2"
+    assert (
+        artifacts.read_embedding_model_name(folder_path=str(folder_path))
+        == "all-MiniLM-L6-v2"
+    )

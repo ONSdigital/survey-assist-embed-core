@@ -235,7 +235,8 @@ def test_search_index_multi_all_none_returns_empty(
 
 def test_embedding_handler_initialization(tmp_path: Path) -> None:
     mock_vector_store = SimpleNamespace(num_vectors=123)
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    backend = ClassifaiVectorBackend()
+    backend._set_embedding_model_name("other")
 
     with patch(
         "survey_assist_embed_core.embed.embedding."
@@ -411,7 +412,8 @@ def test_load_existing_vector_store_gcs_missing_files_uses_artifact_store_error(
 
 def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     store = SimpleNamespace(num_vectors=7)
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    backend = ClassifaiVectorBackend()
+    backend._set_embedding_model_name("other")
 
     with patch(
         "survey_assist_embed_core.embed.embedding."

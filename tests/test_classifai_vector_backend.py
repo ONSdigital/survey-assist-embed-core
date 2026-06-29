@@ -7,9 +7,13 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import pytest
 from classifai.indexers import VectorStoreSearchOutput
 
-from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
+from survey_assist_embed_core.adapters.classifai import (
+    ClassifaiVectorBackend,
+    build_classifai_vector_store_artifacts,
+)
 
 EXPECTED_LOADED_VECTOR_COUNT = 42
 EXPECTED_BUILT_VECTOR_COUNT = 7
@@ -32,7 +36,7 @@ def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput
 
 
 def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    backend = ClassifaiVectorBackend()
     vectoriser = object()
     folder_path = str(tmp_path / "vector_store")
     fake_store = SimpleNamespace(
@@ -57,6 +61,11 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
         ) as mock_ensure_store,
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_embedding_model_name",
+            return_value="persisted-model",
+        ) as mock_read_embedding_model_name,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
             "read_index_source_file",
             return_value="source.csv",
         ) as mock_read_index_source_file,
@@ -65,8 +74,12 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
 
     assert index.num_vectors == EXPECTED_LOADED_VECTOR_COUNT
     assert index_source_file == "source.csv"
+    assert backend.config.settings == {"embedding_model_name": "persisted-model"}
     mock_build_vectoriser.assert_called_once_with()
     mock_ensure_store.assert_called_once_with(
+        folder_path=folder_path,
+    )
+    mock_read_embedding_model_name.assert_called_once_with(
         folder_path=folder_path,
     )
     mock_read_index_source_file.assert_called_once_with(
@@ -79,8 +92,7 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
     )
 
 
-def test_classifai_vector_backend_build_uses_expected_args() -> None:
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
     vectoriser = object()
     fake_store = SimpleNamespace(
         num_vectors=EXPECTED_BUILT_VECTOR_COUNT,
@@ -88,9 +100,9 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
     )
 
     with (
-        patch.object(
-            backend,
-            "_get_vectoriser",
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "NormalisedHFVectoriser",
             return_value=vectoriser,
         ) as mock_build_vectoriser,
         patch(
@@ -101,14 +113,21 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
             "survey_assist_embed_core.adapters.classifai.vector_backend."
             "write_index_source_file",
         ) as mock_write_index_source_file,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "write_embedding_model_name",
+        ) as mock_write_embedding_model_name,
     ):
-        backend.build(
+        build_classifai_vector_store_artifacts(
             file_name="source.csv",
             output_dir="vector_store",
             index_source_file="source.csv",
+            embedding_model_name="other",
         )
 
-    mock_build_vectoriser.assert_called_once_with()
+    mock_build_vectoriser.assert_called_once_with(
+        model_name="sentence-transformers/other"
+    )
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
         data_type="csv",
@@ -123,6 +142,10 @@ def test_classifai_vector_backend_build_uses_expected_args() -> None:
         folder_path="vector_store",
         index_source_file="source.csv",
     )
+    mock_write_embedding_model_name.assert_called_once_with(
+        folder_path="vector_store",
+        embedding_model_name="other",
+    )
 
 
 def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
@@ -132,7 +155,7 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
         num_vectors=1,
         search=MagicMock(return_value=make_search_output(rows)),
     )
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    backend = ClassifaiVectorBackend()
 
     with (
         patch.object(
@@ -151,6 +174,11 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
         ),
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_embedding_model_name",
+            return_value="other",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
             "read_index_source_file",
             return_value=None,
         ),
@@ -165,15 +193,17 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
     assert results[0]["score"] == EXPECTED_SEARCH_SCORE
 
 
-def test_classifai_vector_backend_config_reports_model_name() -> None:
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+def test_classifai_vector_backend_config_reports_loaded_model_name() -> None:
+    backend = ClassifaiVectorBackend()
+    backend._set_embedding_model_name("other")
 
     assert backend.config.backend_name == "classifai"
     assert backend.config.settings == {"embedding_model_name": "other"}
 
 
 def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
-    backend = ClassifaiVectorBackend(embedding_model_name="other")
+    backend = ClassifaiVectorBackend()
+    backend._set_embedding_model_name("other")
     fake_vectoriser = object()
 
     with patch(
@@ -189,16 +219,25 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
     mock_vectoriser.assert_called_once_with(model_name="sentence-transformers/other")
 
 
-def test_classifai_vector_backend_has_persisted_store_uses_artifact_helpers() -> None:
+def test_classifai_vector_backend_load_requires_embedding_model_metadata(
+    tmp_path,
+) -> None:
     backend = ClassifaiVectorBackend()
+    folder_path = str(tmp_path / "vector_store")
 
-    with patch(
-        "survey_assist_embed_core.adapters.classifai.vector_backend."
-        "has_persisted_vectors_file",
-        return_value=True,
-    ) as mock_has_persisted_vectors_file:
-        assert backend.has_persisted_store(folder_path="vector_store") is True
-
-    mock_has_persisted_vectors_file.assert_called_once_with(
-        folder_path="vector_store",
-    )
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "ensure_persisted_vector_store",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_embedding_model_name",
+            return_value=None,
+        ),
+        pytest.raises(
+            FileNotFoundError,
+            match="No embedding model metadata found in persisted vector store",
+        ),
+    ):
+        backend.load(folder_path=folder_path)

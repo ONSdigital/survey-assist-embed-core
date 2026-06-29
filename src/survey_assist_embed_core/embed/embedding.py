@@ -39,11 +39,11 @@ class EmbeddingHandler:
         self._backend = backend if backend is not None else ClassifaiVectorBackend()
         self._storage = storage if storage is not None else LocalGcsStorage()
 
-        logger.info("Using vector backend config: %s", self._backend.config)
-
         self.spell = Speller()
 
         self.vector_store, self.index_source_file = self._load_existing_vector_store()
+
+        logger.info("Using vector backend config: %s", self._backend.config)
 
         self.index_size = (
             self.vector_store.num_vectors if self.vector_store.num_vectors else 0
