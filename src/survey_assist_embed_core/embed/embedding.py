@@ -2,10 +2,10 @@
 
 # pylint: disable=too-many-instance-attributes
 
-import logging
 from typing import cast
 
 from autocorrect import Speller
+from survey_assist_utils import get_logger
 
 from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
 from survey_assist_embed_core.adapters.storage import (
@@ -22,7 +22,7 @@ from survey_assist_embed_core.ports import SearchRow, VectorBackend, VectorIndex
 DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmbeddingHandler:
@@ -44,7 +44,9 @@ class EmbeddingHandler:
 
         self.vector_store, self.index_source_file = self._load_existing_vector_store()
 
-        logger.info("Using vector backend config: %s", self._backend.config)
+        logger.info(
+            "Vector backend config", config=self._backend.config.model_dump(mode="json")
+        )
 
         self.index_size = (
             self.vector_store.num_vectors if self.vector_store.num_vectors else 0
@@ -56,7 +58,8 @@ class EmbeddingHandler:
             )
 
         logger.info(
-            "EmbeddingHandler initialised with config: %s", self.get_embed_config()
+            "EmbeddingHandler initialised",
+            config=self.get_embed_config().model_dump(mode="json"),
         )
 
     def search_index(self, query: str) -> SearchIndexResponse:
@@ -101,7 +104,7 @@ class EmbeddingHandler:
 
     def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
         """Load an existing vector store from a local folder or a GCS URI."""
-        logger.info("Loading existing vector store from %s", self.db_dir)
+        logger.info("Loading existing vector store", db_dir=self.db_dir)
         if is_gcs_path(self.db_dir):
             with download_vector_store_from_gcs(self.db_dir) as downloaded:
                 return self._load_vector_store_from_path(folder_path=downloaded.path)
@@ -122,7 +125,11 @@ class EmbeddingHandler:
                 f"EmbeddingHandler."
             ) from exc
 
-        logger.info("Existing vector store loaded successfully from %s", self.db_dir)
+        logger.info(
+            "Existing vector store loaded successfully",
+            db_dir=self.db_dir,
+            folder_path=folder_path,
+        )
         return vector_store, index_source_file
 
 
