@@ -1,4 +1,4 @@
-"""Storage adapters for retrieval assets."""
+"""Storage-related helpers for retrieval assets."""
 
 from survey_assist_embed_core.adapters.storage.gcs import (
     DownloadedVectorStore,

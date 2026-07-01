@@ -1,4 +1,4 @@
-"""Tests for the GCS retrieval asset helpers."""
+"""Tests for the storage adapter and GCS retrieval asset helpers."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ class _FakeBlob:
 
     def __init__(self, exists: bool):
         self._exists = exists
+        self.name = ""
         self.downloaded_to: str | None = None
 
     def exists(self):
@@ -41,10 +42,18 @@ class _FakeBucket:  # pylint: disable=too-few-public-methods
 
     def __init__(self, blob_map: dict[str, _FakeBlob]):
         self._blob_map = blob_map
+        for name, blob in blob_map.items():
+            blob.name = name
 
     def blob(self, name: str):
         """Return the fake blob for a blob name."""
         return self._blob_map[name]
+
+    def list_blobs(self, prefix: str = ""):
+        """Return fake blobs whose names match the prefix."""
+        return [
+            blob for name, blob in self._blob_map.items() if name.startswith(prefix)
+        ]
 
 
 class _FakeStorageClient:  # pylint: disable=too-few-public-methods
@@ -99,9 +108,10 @@ def test_parse_gcs_uri_missing_bucket() -> None:
 
 @pytest.mark.utils
 def test_download_vector_store_from_gcs_success() -> None:
-    """The helper should download the expected vector store files."""
+    """The helper should download all files under the requested prefix."""
     metadata_blob = _FakeBlob(exists=True)
     vectors_blob = _FakeBlob(exists=True)
+    extra_blob = _FakeBlob(exists=True)
 
     fake_client = _FakeStorageClient(
         {
@@ -109,6 +119,7 @@ def test_download_vector_store_from_gcs_success() -> None:
                 {
                     "prefix/metadata.json": metadata_blob,
                     "prefix/vectors.parquet": vectors_blob,
+                    "prefix/extra/readme.txt": extra_blob,
                 }
             )
         }
@@ -123,6 +134,7 @@ def test_download_vector_store_from_gcs_success() -> None:
     assert isinstance(downloaded, DownloadedVectorStore)
     assert Path(downloaded.path, "metadata.json").exists()
     assert Path(downloaded.path, "vectors.parquet").exists()
+    assert Path(downloaded.path, "extra", "readme.txt").exists()
     assert downloaded.temp_dir is not None
 
     downloaded.cleanup()
@@ -159,17 +171,15 @@ def test_download_vector_store_from_gcs_bucket_root_success() -> None:
 
 
 @pytest.mark.utils
-def test_download_vector_store_from_gcs_missing_files() -> None:
-    """The helper should report missing vector store files clearly."""
-    metadata_blob = _FakeBlob(exists=False)
-    vectors_blob = _FakeBlob(exists=True)
+def test_download_vector_store_from_gcs_missing_prefix() -> None:
+    """The helper should report when no files exist under the store path."""
+    other_blob = _FakeBlob(exists=True)
 
     fake_client = _FakeStorageClient(
         {
             "my-bucket": _FakeBucket(
                 {
-                    "prefix/metadata.json": metadata_blob,
-                    "prefix/vectors.parquet": vectors_blob,
+                    "other-prefix/metadata.json": other_blob,
                 }
             )
         }
@@ -180,23 +190,21 @@ def test_download_vector_store_from_gcs_missing_files() -> None:
             "survey_assist_embed_core.adapters.storage.gcs.Client",
             return_value=fake_client,
         ),
-        pytest.raises(FileNotFoundError, match=r"metadata\.json"),
+        pytest.raises(FileNotFoundError, match=r"No files found in GCS store path"),
     ):
         download_vector_store_from_gcs("gs://my-bucket/prefix")
 
 
 @pytest.mark.utils
-def test_download_vector_store_from_gcs_missing_vectors_file() -> None:
-    """The helper should report a missing vectors file clearly."""
-    metadata_blob = _FakeBlob(exists=True)
-    vectors_blob = _FakeBlob(exists=False)
+def test_download_vector_store_from_gcs_directory_markers_only() -> None:
+    """Directory marker blobs should be ignored and still count as no files."""
+    directory_blob = _FakeBlob(exists=True)
 
     fake_client = _FakeStorageClient(
         {
             "my-bucket": _FakeBucket(
                 {
-                    "prefix/metadata.json": metadata_blob,
-                    "prefix/vectors.parquet": vectors_blob,
+                    "prefix/": directory_blob,
                 }
             )
         }
@@ -207,9 +215,11 @@ def test_download_vector_store_from_gcs_missing_vectors_file() -> None:
             "survey_assist_embed_core.adapters.storage.gcs.Client",
             return_value=fake_client,
         ),
-        pytest.raises(FileNotFoundError, match=r"vectors\.parquet"),
+        pytest.raises(FileNotFoundError, match=r"No files found in GCS store path"),
     ):
         download_vector_store_from_gcs("gs://my-bucket/prefix")
+
+    assert directory_blob.downloaded_to is None
 
 
 @pytest.mark.utils
