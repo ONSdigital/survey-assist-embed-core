@@ -64,7 +64,7 @@ class EmbeddingHandler:
         n_results = min(self.index_size, self.k_matches)
         rows = self.vector_store.search(query, limit=n_results)
 
-        return SearchIndexResponse(results=self._rows_to_search_items(rows))
+        return SearchIndexResponse(results=_rows_to_search_items(rows))
 
     def search_index_multi(self, query: list[str | None]) -> SearchIndexResponse:
         """Return the nearest index entries for combined query fields."""
@@ -84,11 +84,9 @@ class EmbeddingHandler:
                 queries=sorted(search_terms),
                 limit=n_results,
             )
-            for item in self._rows_to_search_items(rows)
+            for item in _rows_to_search_items(rows)
         ]
-        return SearchIndexResponse(
-            results=self._sort_and_deduplicate_results(short_list)
-        )
+        return SearchIndexResponse(results=_sort_and_deduplicate_results(short_list))
 
     def get_embed_config(self) -> EmbeddingStatus:
         """Return the current embedding configuration and ready status."""
@@ -127,32 +125,33 @@ class EmbeddingHandler:
         logger.info("Existing vector store loaded successfully from %s", self.db_dir)
         return vector_store, index_source_file
 
-    def _rows_to_search_items(self, rows: list[SearchRow]) -> list[SearchIndexItem]:
-        """Convert backend search rows into the public response shape."""
-        return [
-            SearchIndexItem(
-                distance=float(1.0 - float(cast(float | int, row["score"]))),
-                title=str(row["doc_text"]),
-                code=str(row["doc_label"]),
-            )
-            for row in rows
-        ]
 
-    def _sort_and_deduplicate_results(
-        self, items: list[SearchIndexItem]
-    ) -> list[SearchIndexItem]:
-        """Deduplicate combined-search results and return them in a stable order."""
-        best_by_key: dict[tuple[str, str], SearchIndexItem] = {}
-        for item in items:
-            item_key = (item.code, item.title)
-            existing = best_by_key.get(item_key)
-            if existing is None or item.distance < existing.distance:
-                best_by_key[item_key] = item
+def _rows_to_search_items(rows: list[SearchRow]) -> list[SearchIndexItem]:
+    """Convert backend search rows into the public response shape."""
+    return [
+        SearchIndexItem(
+            distance=float(1.0 - float(cast(float | int, row["score"]))),
+            title=str(row["doc_text"]),
+            code=str(row["doc_label"]),
+        )
+        for row in rows
+    ]
 
-        return sorted(best_by_key.values(), key=self._search_item_sort_key)
 
-    def _search_item_sort_key(
-        self, item: SearchIndexItem
-    ) -> tuple[float, str, str, str]:
-        """Return a deterministic sort key for public search items."""
-        return (item.distance, item.code, item.title.casefold(), item.title)
+def _sort_and_deduplicate_results(
+    items: list[SearchIndexItem],
+) -> list[SearchIndexItem]:
+    """Deduplicate combined-search results and return them in a stable order."""
+    best_by_key: dict[tuple[str, str], SearchIndexItem] = {}
+    for item in items:
+        item_key = (item.code, item.title)
+        existing = best_by_key.get(item_key)
+        if existing is None or item.distance < existing.distance:
+            best_by_key[item_key] = item
+
+    return sorted(best_by_key.values(), key=_search_item_sort_key)
+
+
+def _search_item_sort_key(item: SearchIndexItem) -> tuple[float, str, str, str]:
+    """Return a deterministic sort key for public search items."""
+    return (item.distance, item.code, item.title.casefold(), item.title)
