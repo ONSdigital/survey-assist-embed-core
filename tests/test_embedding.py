@@ -21,7 +21,7 @@ from survey_assist_embed_core.embed import EmbeddingHandler
 from survey_assist_embed_core.models import SearchIndexResponse, VectorBackendConfig
 
 EXPECTED_TOY_INDEX_SIZE = 4
-EXPECTED_MULTI_RESULTS = 4
+EXPECTED_MULTI_RESULTS = 2
 EXPECTED_TOP_DISTANCE = 0.1
 EXPECTED_CONFIG_K_MATCHES = 5
 EXPECTED_CONFIG_INDEX_SIZE = 7
@@ -197,13 +197,43 @@ def test_search_index_multi(tmp_path: Path) -> None:
         response = handler.search_index_multi(["has gills", "has scales"])
 
     assert len(response.results) == EXPECTED_MULTI_RESULTS
-    assert response.results[0].code == "03"
+    assert [(item.code, item.title) for item in response.results] == [
+        ("03", "fish"),
+        ("04", "lizard"),
+    ]
     assert response.results[0].distance == pytest.approx(EXPECTED_TOP_DISTANCE)
-    fake_store.search_many.assert_called_once()
-    assert set(fake_store.search_many.call_args.kwargs["queries"]) == {
-        "has gills",
-        "has gills has scales",
-    }
+    assert response.results[1].distance == pytest.approx(0.2)
+    fake_store.search_many.assert_called_once_with(
+        queries=["has gills", "has gills has scales"],
+        limit=EXPECTED_TOY_INDEX_SIZE,
+    )
+
+
+def test_search_index_multi_sorts_ties_deterministically(tmp_path: Path) -> None:
+    fake_store = SimpleNamespace(
+        num_vectors=2,
+        search_many=MagicMock(
+            return_value=[
+                [{"doc_text": "alpha", "score": 0.8, "doc_label": "02"}],
+                [{"doc_text": "zeta", "score": 0.8, "doc_label": "01"}],
+            ]
+        ),
+    )
+
+    with patch(
+        "survey_assist_embed_core.embed.embedding."
+        "EmbeddingHandler._load_existing_vector_store",
+        return_value=(fake_store, "mock-source.csv"),
+    ):
+        handler = EmbeddingHandler(db_dir=str(tmp_path / "vector_store"))
+
+    with patch.object(handler, "spell", side_effect=lambda text: text):
+        response = handler.search_index_multi(["has gills", "has scales"])
+
+    assert [(item.code, item.title) for item in response.results] == [
+        ("01", "zeta"),
+        ("02", "alpha"),
+    ]
 
 
 def test_search_index_multi_filters_none_values(tmp_path: Path) -> None:

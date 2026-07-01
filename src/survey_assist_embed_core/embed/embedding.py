@@ -72,22 +72,22 @@ class EmbeddingHandler:
         if not query_terms:
             return SearchIndexResponse(results=[])
 
-        search_terms_list: set[str] = set()
+        search_terms: set[str] = set()
         for i in range(1, len(query_terms) + 1):
             term = " ".join(query_terms[:i])
-            search_terms_list.add(term)
-            search_terms_list.add(self.spell(term))
+            search_terms.add(term)
+            search_terms.add(self.spell(term))
         n_results = min(self.index_size, self.k_matches)
         short_list = [
             item
             for rows in self.vector_store.search_many(
-                queries=list(search_terms_list),
+                queries=sorted(search_terms),
                 limit=n_results,
             )
             for item in self._rows_to_search_items(rows)
         ]
         return SearchIndexResponse(
-            results=sorted(short_list, key=lambda item: item.distance)
+            results=self._sort_and_deduplicate_results(short_list)
         )
 
     def get_embed_config(self) -> EmbeddingStatus:
@@ -137,3 +137,22 @@ class EmbeddingHandler:
             )
             for row in rows
         ]
+
+    def _sort_and_deduplicate_results(
+        self, items: list[SearchIndexItem]
+    ) -> list[SearchIndexItem]:
+        """Deduplicate combined-search results and return them in a stable order."""
+        best_by_key: dict[tuple[str, str], SearchIndexItem] = {}
+        for item in items:
+            item_key = (item.code, item.title)
+            existing = best_by_key.get(item_key)
+            if existing is None or item.distance < existing.distance:
+                best_by_key[item_key] = item
+
+        return sorted(best_by_key.values(), key=self._search_item_sort_key)
+
+    def _search_item_sort_key(
+        self, item: SearchIndexItem
+    ) -> tuple[float, str, str, str]:
+        """Return a deterministic sort key for public search items."""
+        return (item.distance, item.code, item.title.casefold(), item.title)
