@@ -49,6 +49,11 @@ class EmbeddingHandler:
         self.index_size = (
             self.vector_store.num_vectors if self.vector_store.num_vectors else 0
         )
+        if self.index_size < 1:
+            raise ValueError(
+                "Persisted vector store contains no vectors. Rebuild the "
+                "vector-store artifacts before initialising EmbeddingHandler."
+            )
 
         logger.info(
             "EmbeddingHandler initialised with config: %s", self.get_embed_config()

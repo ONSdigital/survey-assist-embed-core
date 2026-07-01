@@ -99,6 +99,23 @@ def test_embedding_handler_init_sets_index_size(tmp_path: Path) -> None:
     assert handler.index_size == EXPECTED_TOY_INDEX_SIZE
 
 
+def test_embedding_handler_init_rejects_empty_vector_store(tmp_path: Path) -> None:
+    empty_store = SimpleNamespace(num_vectors=0)
+
+    with (
+        patch(
+            "survey_assist_embed_core.embed.embedding."
+            "EmbeddingHandler._load_existing_vector_store",
+            return_value=(empty_store, "mock-source.csv"),
+        ),
+        pytest.raises(
+            ValueError,
+            match="Persisted vector store contains no vectors",
+        ),
+    ):
+        EmbeddingHandler(db_dir=str(tmp_path / "vector_store"))
+
+
 def test_embedding_handler_init_keeps_falsey_explicit_dependencies(
     tmp_path: Path,
 ) -> None:
