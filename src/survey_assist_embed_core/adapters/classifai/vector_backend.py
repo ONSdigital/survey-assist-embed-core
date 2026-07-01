@@ -32,28 +32,6 @@ DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = (
 )
 
 
-def _normalise_model_name(name: str) -> str:
-    """Return a fully-qualified HuggingFace model identifier.
-
-    If ``name`` already contains a ``/`` it is treated as a complete
-    ``{org}/{model}`` identifier and returned unchanged.  Otherwise the
-    sentence-transformers organisation is prepended as the default.
-    """
-    if "/" in name:
-        return name
-    return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"
-
-
-@contextmanager
-def _resolve_local_path(path: str) -> Iterator[str]:
-    """Yield a local filesystem path, downloading from GCS if necessary."""
-    if is_gcs_path(path):
-        with download_one_file_from_gcs(path) as downloaded:
-            yield downloaded.path
-    else:
-        yield path
-
-
 def build_classifai_vector_store_artifacts(
     *,
     index_source_file: str,
@@ -162,3 +140,25 @@ class ClassifaiVectorBackend:
             vectoriser = NormalisedHFVectoriser(model_name=self._embedding_model_name)
             self._vectoriser = vectoriser
         return vectoriser
+
+
+def _normalise_model_name(name: str) -> str:
+    """Return a fully-qualified HuggingFace model identifier.
+
+    If ``name`` already contains a ``/`` it is treated as a complete
+    ``{org}/{model}`` identifier and returned unchanged.  Otherwise the
+    sentence-transformers organisation is prepended as the default.
+    """
+    if "/" in name:
+        return name
+    return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"
+
+
+@contextmanager
+def _resolve_local_path(path: str) -> Iterator[str]:
+    """Yield a local filesystem path, downloading from GCS if necessary."""
+    if is_gcs_path(path):
+        with download_one_file_from_gcs(path) as downloaded:
+            yield downloaded.path
+    else:
+        yield path
