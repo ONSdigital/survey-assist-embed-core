@@ -149,9 +149,7 @@ def _sort_and_deduplicate_results(
         if existing is None or item.distance < existing.distance:
             best_by_key[item_key] = item
 
-    return sorted(best_by_key.values(), key=_search_item_sort_key)
-
-
-def _search_item_sort_key(item: SearchIndexItem) -> tuple[float, str, str, str]:
-    """Return a deterministic sort key for public search items."""
-    return (item.distance, item.code, item.title.casefold(), item.title)
+    return sorted(
+        best_by_key.values(),
+        key=lambda item: (item.distance, item.code, item.title.casefold(), item.title),
+    )
