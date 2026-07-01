@@ -74,12 +74,26 @@ class _ClassifaiVectorIndex:
 
     def search(self, query: str, *, limit: int) -> list[SearchRow]:
         """Search the wrapped store and return backend rows."""
-        search_input = VectorStoreSearchInput({"id": ["q1"], "query": [query]})
+        return self.search_many([query], limit=limit)[0]
+
+    def search_many(self, queries: list[str], *, limit: int) -> list[list[SearchRow]]:
+        """Search the wrapped store for multiple queries in one backend call."""
+        if not queries:
+            return []
+
+        query_ids = [f"q{i}" for i in range(1, len(queries) + 1)]
+        search_input = VectorStoreSearchInput({"id": query_ids, "query": queries})
         results: VectorStoreSearchOutput = self._store.search(
             search_input,
             n_results=limit,
         )
-        return cast(list[SearchRow], results.to_dict(orient="records"))
+        rows_by_query_id: dict[str, list[SearchRow]] = {
+            query_id: [] for query_id in query_ids
+        }
+        for row in cast(list[SearchRow], results.to_dict(orient="records")):
+            rows_by_query_id[str(row["query_id"])].append(row)
+
+        return [rows_by_query_id[query_id] for query_id in query_ids]
 
 
 class ClassifaiVectorBackend:

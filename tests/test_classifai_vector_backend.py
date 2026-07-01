@@ -31,11 +31,11 @@ def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput
     """Build a valid ClassifAI search output for tests."""
     return VectorStoreSearchOutput.from_data(
         {
-            "query_id": ["q1"] * len(rows),
-            "query_text": ["test query"] * len(rows),
+            "query_id": [str(row.get("query_id", "q1")) for row in rows],
+            "query_text": [str(row.get("query_text", "test query")) for row in rows],
             "doc_label": [str(row["doc_label"]) for row in rows],
             "doc_text": [str(row["doc_text"]) for row in rows],
-            "rank": list(range(1, len(rows) + 1)),
+            "rank": [int(row.get("rank", index + 1)) for index, row in enumerate(rows)],
             "score": [float(cast(float | int, row["score"])) for row in rows],
         }
     )
@@ -259,10 +259,97 @@ def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:
 
     results = index.search("dog", limit=EXPECTED_SEARCH_LIMIT)
 
+    called_input = fake_store.search.call_args.args[0]
+    assert called_input.id.to_list() == ["q1"]
+    assert called_input.query.to_list() == ["dog"]
     assert fake_store.search.call_args.kwargs["n_results"] == EXPECTED_SEARCH_LIMIT
     assert results[0]["doc_label"] == "02"
     assert results[0]["doc_text"] == "dog"
     assert results[0]["score"] == EXPECTED_SEARCH_SCORE
+
+
+def test_classifai_vector_backend_search_many_batches_queries(tmp_path) -> None:
+    rows = [
+        {
+            "query_id": "q2",
+            "query_text": "cat",
+            "doc_text": "cat",
+            "score": 0.8,
+            "doc_label": "01",
+            "rank": 1,
+        },
+        {
+            "query_id": "q1",
+            "query_text": "dog",
+            "doc_text": "dog",
+            "score": EXPECTED_SEARCH_SCORE,
+            "doc_label": "02",
+            "rank": 1,
+        },
+    ]
+    folder_path = str(tmp_path / "vector_store")
+    fake_store = SimpleNamespace(
+        num_vectors=2,
+        search=MagicMock(return_value=make_search_output(rows)),
+    )
+    backend = ClassifaiVectorBackend()
+
+    with (
+        patch.object(
+            backend,
+            "_get_vectoriser",
+            return_value=object(),
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "ensure_persisted_vector_store",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_embedding_model_name",
+            return_value="other",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_index_source_file",
+            return_value=None,
+        ),
+    ):
+        index, _ = backend.load(folder_path=folder_path)
+
+    results = index.search_many(["dog", "cat"], limit=EXPECTED_SEARCH_LIMIT)
+
+    called_input = fake_store.search.call_args.args[0]
+    assert called_input.id.to_list() == ["q1", "q2"]
+    assert called_input.query.to_list() == ["dog", "cat"]
+    assert fake_store.search.call_args.kwargs["n_results"] == EXPECTED_SEARCH_LIMIT
+    assert results == [
+        [
+            {
+                "query_id": "q1",
+                "query_text": "dog",
+                "doc_label": "02",
+                "doc_text": "dog",
+                "rank": 1,
+                "score": EXPECTED_SEARCH_SCORE,
+            }
+        ],
+        [
+            {
+                "query_id": "q2",
+                "query_text": "cat",
+                "doc_label": "01",
+                "doc_text": "cat",
+                "rank": 1,
+                "score": 0.8,
+            }
+        ],
+    ]
 
 
 def test_classifai_vector_backend_config_reports_loaded_model_name() -> None:

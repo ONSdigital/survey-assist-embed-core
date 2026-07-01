@@ -17,7 +17,7 @@ from survey_assist_embed_core.models import (
     SearchIndexItem,
     SearchIndexResponse,
 )
-from survey_assist_embed_core.ports import VectorBackend, VectorIndex
+from survey_assist_embed_core.ports import SearchRow, VectorBackend, VectorIndex
 
 DEFAULT_DB_DIR = "vector_store"
 DEFAULT_K_MATCHES = 20
@@ -90,16 +90,18 @@ class EmbeddingHandler:
         n_results = min(self.index_size, self.k_matches)
         rows = self.vector_store.search(query, limit=n_results)
 
-        return SearchIndexResponse(
-            results=[
-                SearchIndexItem(
-                    distance=float(1.0 - float(cast(float | int, row["score"]))),
-                    title=str(row["doc_text"]),
-                    code=str(row["doc_label"]),
-                )
-                for row in rows
-            ]
-        )
+        return SearchIndexResponse(results=self._rows_to_search_items(rows))
+
+    def _rows_to_search_items(self, rows: list[SearchRow]) -> list[SearchIndexItem]:
+        """Convert backend search rows into the public response shape."""
+        return [
+            SearchIndexItem(
+                distance=float(1.0 - float(cast(float | int, row["score"]))),
+                title=str(row["doc_text"]),
+                code=str(row["doc_label"]),
+            )
+            for row in rows
+        ]
 
     def search_index_multi(self, query: list[str | None]) -> SearchIndexResponse:
         """Return the nearest index entries for combined query fields."""
@@ -112,10 +114,14 @@ class EmbeddingHandler:
             term = " ".join(query_terms[:i])
             search_terms_list.add(term)
             search_terms_list.add(self.spell(term))
+        n_results = min(self.index_size, self.k_matches)
         short_list = [
-            hit
-            for term in search_terms_list
-            for hit in self.search_index(query=term).results
+            item
+            for rows in self.vector_store.search_many(
+                queries=list(search_terms_list),
+                limit=n_results,
+            )
+            for item in self._rows_to_search_items(rows)
         ]
         return SearchIndexResponse(
             results=sorted(short_list, key=lambda item: item.distance)

@@ -18,6 +18,9 @@ class VectorIndex(Protocol):
     def search(self, query: str, *, limit: int) -> list[SearchRow]:
         """Return backend search rows for a query."""
 
+    def search_many(self, queries: list[str], *, limit: int) -> list[list[SearchRow]]:
+        """Return backend search rows for multiple queries in input order."""
+
 
 class VectorBackend(Protocol):
     """Protocol for runtime operations against a vector backend."""

@@ -18,11 +18,7 @@ from survey_assist_embed_core.adapters.classifai import (
 )
 from survey_assist_embed_core.adapters.storage.gcs import DownloadedVectorStore
 from survey_assist_embed_core.embed import EmbeddingHandler
-from survey_assist_embed_core.models import (
-    SearchIndexItem,
-    SearchIndexResponse,
-    VectorBackendConfig,
-)
+from survey_assist_embed_core.models import SearchIndexResponse, VectorBackendConfig
 
 EXPECTED_TOY_INDEX_SIZE = 4
 EXPECTED_MULTI_RESULTS = 4
@@ -174,67 +170,67 @@ def test_search_index_uses_backend_search_rows(tmp_path: Path) -> None:
 
 
 def test_search_index_multi(tmp_path: Path) -> None:
-    placeholder_store = SimpleNamespace(num_vectors=1)
+    fake_store = SimpleNamespace(
+        num_vectors=EXPECTED_TOY_INDEX_SIZE,
+        search_many=MagicMock(
+            return_value=[
+                [
+                    {"doc_text": "fish", "score": 0.6, "doc_label": "03"},
+                    {"doc_text": "lizard", "score": 0.4, "doc_label": "04"},
+                ],
+                [
+                    {"doc_text": "fish", "score": 0.9, "doc_label": "03"},
+                    {"doc_text": "lizard", "score": 0.8, "doc_label": "04"},
+                ],
+            ]
+        ),
+    )
 
     with patch(
         "survey_assist_embed_core.embed.embedding."
         "EmbeddingHandler._load_existing_vector_store",
-        return_value=(placeholder_store, "mock-source.csv"),
+        return_value=(fake_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(db_dir=str(tmp_path / "vector_store"))
 
-    with (
-        patch.object(handler, "spell", side_effect=lambda text: text),
-        patch.object(
-            handler,
-            "search_index",
-            side_effect=[
-                SearchIndexResponse(
-                    results=[
-                        SearchIndexItem(code="03", title="fish", distance=0.4),
-                        SearchIndexItem(code="04", title="lizard", distance=0.6),
-                    ]
-                ),
-                SearchIndexResponse(
-                    results=[
-                        SearchIndexItem(code="03", title="fish", distance=0.1),
-                        SearchIndexItem(code="04", title="lizard", distance=0.2),
-                    ]
-                ),
-            ],
-        ),
-    ):
+    with patch.object(handler, "spell", side_effect=lambda text: text):
         response = handler.search_index_multi(["has gills", "has scales"])
 
     assert len(response.results) == EXPECTED_MULTI_RESULTS
     assert response.results[0].code == "03"
-    assert response.results[0].distance == EXPECTED_TOP_DISTANCE
+    assert response.results[0].distance == pytest.approx(EXPECTED_TOP_DISTANCE)
+    fake_store.search_many.assert_called_once()
+    assert set(fake_store.search_many.call_args.kwargs["queries"]) == {
+        "has gills",
+        "has gills has scales",
+    }
 
 
 def test_search_index_multi_filters_none_values(tmp_path: Path) -> None:
-    placeholder_store = SimpleNamespace(num_vectors=1)
+    fake_store = SimpleNamespace(
+        num_vectors=1,
+        search_many=MagicMock(
+            return_value=[
+                [{"doc_text": "fish", "score": 0.7, "doc_label": "03"}],
+            ]
+        ),
+    )
 
     with patch(
         "survey_assist_embed_core.embed.embedding."
         "EmbeddingHandler._load_existing_vector_store",
-        return_value=(placeholder_store, "mock-source.csv"),
+        return_value=(fake_store, "mock-source.csv"),
     ):
         handler = EmbeddingHandler(db_dir=str(tmp_path / "vector_store"))
 
-    with (
-        patch.object(handler, "spell", side_effect=lambda text: text),
-        patch.object(
-            handler,
-            "search_index",
-            return_value=SearchIndexResponse(
-                results=[SearchIndexItem(code="03", title="fish", distance=0.3)]
-            ),
-        ) as mock_search,
-    ):
+    with patch.object(handler, "spell", side_effect=lambda text: text):
         response = handler.search_index_multi([None, "has gills"])
 
-    assert response.results == [SearchIndexItem(code="03", title="fish", distance=0.3)]
-    mock_search.assert_called_once_with(query="has gills")
+    assert len(response.results) == 1
+    assert response.results[0].code == "03"
+    assert response.results[0].title == "fish"
+    assert response.results[0].distance == pytest.approx(0.3)
+    fake_store.search_many.assert_called_once_with(queries=["has gills"], limit=1)
 
 
 def test_search_index_multi_all_none_returns_empty(
