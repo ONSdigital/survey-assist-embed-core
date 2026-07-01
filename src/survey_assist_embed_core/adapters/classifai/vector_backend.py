@@ -26,7 +26,22 @@ from survey_assist_embed_core.adapters.storage import (
 from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
 
-DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+_DEFAULT_SENTENCE_TRANSFORMERS_ORG = "sentence-transformers"
+DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = (
+    f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/all-MiniLM-L6-v2"
+)
+
+
+def _normalise_model_name(name: str) -> str:
+    """Return a fully-qualified HuggingFace model identifier.
+
+    If ``name`` already contains a ``/`` it is treated as a complete
+    ``{org}/{model}`` identifier and returned unchanged.  Otherwise the
+    sentence-transformers organisation is prepended as the default.
+    """
+    if "/" in name:
+        return name
+    return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"
 
 
 @contextmanager
@@ -46,6 +61,7 @@ def build_classifai_vector_store_artifacts(
     embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
 ) -> None:
     """Build persisted ClassifAI vector-store artifacts from a source CSV."""
+    embedding_model_name = _normalise_model_name(embedding_model_name)
     with _resolve_local_path(index_source_file) as local_file:
         vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
         VectorStore(

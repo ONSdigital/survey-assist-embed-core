@@ -16,6 +16,7 @@ from survey_assist_embed_core.adapters.classifai import (
     build_classifai_vector_store_artifacts,
 )
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
+    _normalise_model_name,
     _resolve_local_path,
 )
 from survey_assist_embed_core.adapters.storage import DownloadedVectorStore
@@ -130,7 +131,9 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
             embedding_model_name="other",
         )
 
-    mock_build_vectoriser.assert_called_once_with(model_name="other")
+    mock_build_vectoriser.assert_called_once_with(
+        model_name="sentence-transformers/other"
+    )
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
         data_type="csv",
@@ -144,7 +147,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
     mock_write_vector_store_metadata.assert_called_once_with(
         folder_path="vector_store",
         index_source_file="source.csv",
-        embedding_model_name="other",
+        embedding_model_name="sentence-transformers/other",
     )
 
 
@@ -152,6 +155,21 @@ def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
     local_file = str(tmp_path / "source.csv")
     with _resolve_local_path(local_file) as resolved:
         assert resolved == local_file
+
+
+def test_classifai_normalise_model_name_prepends_prefix() -> None:
+    # bare name gets the default org prepended
+    assert (
+        _normalise_model_name("all-MiniLM-L6-v2")
+        == "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    # fully qualified names of any org pass through unchanged
+    assert (
+        _normalise_model_name("sentence-transformers/all-MiniLM-L6-v2")
+        == "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    assert _normalise_model_name("BAAI/bge-small-en-v1.5") == "BAAI/bge-small-en-v1.5"
+    assert _normalise_model_name("intfloat/e5-small-v2") == "intfloat/e5-small-v2"
 
 
 def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
