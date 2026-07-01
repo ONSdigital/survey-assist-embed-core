@@ -42,7 +42,22 @@ def write_vector_store_metadata(
     index_source_file: str | None,
     embedding_model_name: str | None,
 ) -> None:
-    """Write or update persisted vector-store metadata in a single operation."""
+    """Write or update persisted vector-store metadata in a single operation.
+
+    classifai's VectorStore replaces metadata.json entirely when it builds, so
+    any keys already present before this call were written by classifai.  If any
+    of our keys collide with those we raise immediately rather than silently
+    overwriting classifai-owned data.
+    """
+    our_keys = {INDEX_SOURCE_FILE_KEY, EMBEDDING_MODEL_NAME_KEY}
+    existing = set(_read_metadata(folder_path).keys())
+    collisions = our_keys & existing
+    if collisions:
+        raise ValueError(
+            f"Metadata keys {sorted(collisions)} are already present in "
+            f"{_metadata_path(folder_path)!r}."
+        )
+
     metadata = _read_metadata(folder_path)
     metadata[INDEX_SOURCE_FILE_KEY] = str(index_source_file)
     metadata[EMBEDDING_MODEL_NAME_KEY] = str(embedding_model_name)

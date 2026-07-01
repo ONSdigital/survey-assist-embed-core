@@ -86,3 +86,25 @@ def test_classifai_artifact_store_writes_metadata_in_single_operation(
         "index_source_file": "source.csv",
         "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",
     }
+
+
+def test_write_vector_store_metadata_rejects_collision_with_existing_key(
+    tmp_path: Path,
+) -> None:
+    """If a key we want to write is already present (written by classifai), raise."""
+    folder_path = tmp_path / "vector_store"
+    folder_path.mkdir()
+
+    # Simulate classifai writing metadata.json first, with a key that collides
+    # with one of ours (as if a future classifai version adopted our key name).
+    (folder_path / "metadata.json").write_text(
+        json.dumps({artifacts.INDEX_SOURCE_FILE_KEY: "classifai-value"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="already present"):
+        artifacts.write_vector_store_metadata(
+            folder_path=str(folder_path),
+            index_source_file="source.csv",
+            embedding_model_name="sentence-transformers/all-MiniLM-L6-v2",
+        )
