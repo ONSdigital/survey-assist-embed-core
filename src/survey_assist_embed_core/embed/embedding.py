@@ -59,49 +59,12 @@ class EmbeddingHandler:
             "EmbeddingHandler initialised with config: %s", self.get_embed_config()
         )
 
-    def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
-        """Load an existing vector store from a local folder or a GCS URI."""
-        logger.info("Loading existing vector store from %s", self.db_dir)
-        if is_gcs_path(self.db_dir):
-            with download_vector_store_from_gcs(self.db_dir) as downloaded:
-                return self._load_vector_store_from_path(folder_path=downloaded.path)
-
-        return self._load_vector_store_from_path(folder_path=self.db_dir)
-
-    def _load_vector_store_from_path(
-        self, *, folder_path: str
-    ) -> tuple[VectorIndex, str | None]:
-        """Load a vector store from an already-resolved local folder path."""
-        try:
-            vector_store, index_source_file = self._backend.load(
-                folder_path=folder_path
-            )
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(
-                f"{exc} Build the vector-store artifacts before initialising "
-                f"EmbeddingHandler."
-            ) from exc
-
-        logger.info("Existing vector store loaded successfully from %s", self.db_dir)
-        return vector_store, index_source_file
-
     def search_index(self, query: str) -> SearchIndexResponse:
         """Return the nearest index entries for a query string."""
         n_results = min(self.index_size, self.k_matches)
         rows = self.vector_store.search(query, limit=n_results)
 
         return SearchIndexResponse(results=self._rows_to_search_items(rows))
-
-    def _rows_to_search_items(self, rows: list[SearchRow]) -> list[SearchIndexItem]:
-        """Convert backend search rows into the public response shape."""
-        return [
-            SearchIndexItem(
-                distance=float(1.0 - float(cast(float | int, row["score"]))),
-                title=str(row["doc_text"]),
-                code=str(row["doc_label"]),
-            )
-            for row in rows
-        ]
 
     def search_index_multi(self, query: list[str | None]) -> SearchIndexResponse:
         """Return the nearest index entries for combined query fields."""
@@ -137,3 +100,40 @@ class EmbeddingHandler:
             index_size=self.index_size,
             status="ready",
         )
+
+    def _load_existing_vector_store(self) -> tuple[VectorIndex, str | None]:
+        """Load an existing vector store from a local folder or a GCS URI."""
+        logger.info("Loading existing vector store from %s", self.db_dir)
+        if is_gcs_path(self.db_dir):
+            with download_vector_store_from_gcs(self.db_dir) as downloaded:
+                return self._load_vector_store_from_path(folder_path=downloaded.path)
+
+        return self._load_vector_store_from_path(folder_path=self.db_dir)
+
+    def _load_vector_store_from_path(
+        self, *, folder_path: str
+    ) -> tuple[VectorIndex, str | None]:
+        """Load a vector store from an already-resolved local folder path."""
+        try:
+            vector_store, index_source_file = self._backend.load(
+                folder_path=folder_path
+            )
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"{exc} Build the vector-store artifacts before initialising "
+                f"EmbeddingHandler."
+            ) from exc
+
+        logger.info("Existing vector store loaded successfully from %s", self.db_dir)
+        return vector_store, index_source_file
+
+    def _rows_to_search_items(self, rows: list[SearchRow]) -> list[SearchIndexItem]:
+        """Convert backend search rows into the public response shape."""
+        return [
+            SearchIndexItem(
+                distance=float(1.0 - float(cast(float | int, row["score"]))),
+                title=str(row["doc_text"]),
+                code=str(row["doc_label"]),
+            )
+            for row in rows
+        ]
