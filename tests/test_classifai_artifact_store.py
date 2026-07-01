@@ -32,43 +32,6 @@ def test_classifai_artifact_store_error_uses_default_layout_names(
     assert "metadata.json, vectors.parquet" in str(exc_info.value)
 
 
-def test_classifai_artifact_store_reads_and_writes_source_file(
-    tmp_path: Path,
-) -> None:
-    folder_path = tmp_path / "vector_store"
-    folder_path.mkdir()
-
-    artifacts.write_index_source_file(
-        folder_path=str(folder_path),
-        index_source_file="source.csv",
-    )
-
-    metadata = json.loads((folder_path / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["index_source_file"] == "source.csv"
-    assert (
-        artifacts.read_index_source_file(folder_path=str(folder_path)) == "source.csv"
-    )
-
-
-def test_classifai_artifact_store_reads_and_writes_embedding_model_name(
-    tmp_path: Path,
-) -> None:
-    folder_path = tmp_path / "vector_store"
-    folder_path.mkdir()
-
-    artifacts.write_embedding_model_name(
-        folder_path=str(folder_path),
-        embedding_model_name="all-MiniLM-L6-v2",
-    )
-
-    metadata = json.loads((folder_path / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["embedding_model_name"] == "all-MiniLM-L6-v2"
-    assert (
-        artifacts.read_embedding_model_name(folder_path=str(folder_path))
-        == "all-MiniLM-L6-v2"
-    )
-
-
 def test_classifai_artifact_store_writes_metadata_in_single_operation(
     tmp_path: Path,
 ) -> None:
@@ -86,6 +49,13 @@ def test_classifai_artifact_store_writes_metadata_in_single_operation(
         "index_source_file": "source.csv",
         "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",
     }
+    assert (
+        artifacts.read_index_source_file(folder_path=str(folder_path)) == "source.csv"
+    )
+    assert (
+        artifacts.read_embedding_model_name(folder_path=str(folder_path))
+        == "sentence-transformers/all-MiniLM-L6-v2"
+    )
 
 
 def test_write_vector_store_metadata_rejects_collision_with_existing_key(
