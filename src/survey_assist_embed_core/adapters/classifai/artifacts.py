@@ -36,6 +36,19 @@ def _write_metadata(folder_path: str, metadata: dict[str, str]) -> None:
         json.dump(metadata, file_obj)
 
 
+def write_vector_store_metadata(
+    *,
+    folder_path: str,
+    index_source_file: str | None,
+    embedding_model_name: str | None,
+) -> None:
+    """Write or update persisted vector-store metadata in a single operation."""
+    metadata = _read_metadata(folder_path)
+    metadata[INDEX_SOURCE_FILE_KEY] = str(index_source_file)
+    metadata[EMBEDDING_MODEL_NAME_KEY] = str(embedding_model_name)
+    _write_metadata(folder_path, metadata)
+
+
 def _write_metadata_value(*, folder_path: str, key: str, value: str | None) -> None:
     """Write or update a single persisted metadata value."""
     metadata = _read_metadata(folder_path)

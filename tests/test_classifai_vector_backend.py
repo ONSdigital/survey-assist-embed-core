@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -14,6 +15,10 @@ from survey_assist_embed_core.adapters.classifai import (
     ClassifaiVectorBackend,
     build_classifai_vector_store_artifacts,
 )
+from survey_assist_embed_core.adapters.classifai.vector_backend import (
+    _resolve_local_path,
+)
+from survey_assist_embed_core.adapters.storage import DownloadedVectorStore
 
 EXPECTED_LOADED_VECTOR_COUNT = 42
 EXPECTED_BUILT_VECTOR_COUNT = 7
@@ -111,17 +116,17 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         ) as mock_vector_store,
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "write_index_source_file",
-        ) as mock_write_index_source_file,
+            "write_vector_store_metadata",
+        ) as mock_write_vector_store_metadata,
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "write_embedding_model_name",
-        ) as mock_write_embedding_model_name,
+            "_resolve_local_path",
+            side_effect=contextmanager(lambda path: iter([path])),
+        ),
     ):
         build_classifai_vector_store_artifacts(
-            file_name="source.csv",
-            output_dir="vector_store",
             index_source_file="source.csv",
+            output_dir="vector_store",
             embedding_model_name="other",
         )
 
@@ -136,14 +141,65 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         overwrite=True,
         hooks=None,
     )
-    mock_write_index_source_file.assert_called_once_with(
+    mock_write_vector_store_metadata.assert_called_once_with(
         folder_path="vector_store",
         index_source_file="source.csv",
-    )
-    mock_write_embedding_model_name.assert_called_once_with(
-        folder_path="vector_store",
         embedding_model_name="other",
     )
+
+
+def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
+    local_file = str(tmp_path / "source.csv")
+    with _resolve_local_path(local_file) as resolved:
+        assert resolved == local_file
+
+
+def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
+    tmp_path,
+) -> None:
+    vectoriser = object()
+    fake_store = SimpleNamespace(
+        num_vectors=EXPECTED_BUILT_VECTOR_COUNT,
+        search=MagicMock(),
+    )
+    downloaded_path = str(tmp_path / "downloaded.csv")
+    downloaded = DownloadedVectorStore(
+        path=downloaded_path,
+        temp_dir=SimpleNamespace(name=str(tmp_path), cleanup=lambda: None),
+    )
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "NormalisedHFVectoriser",
+            return_value=vectoriser,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.VectorStore",
+            return_value=fake_store,
+        ) as mock_vector_store,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "write_vector_store_metadata",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.is_gcs_path",
+            return_value=True,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "download_one_file_from_gcs",
+            return_value=downloaded,
+        ) as mock_download,
+    ):
+        build_classifai_vector_store_artifacts(
+            index_source_file="gs://my-bucket/source.csv",
+            output_dir="vector_store",
+            embedding_model_name="other",
+        )
+
+    mock_download.assert_called_once_with("gs://my-bucket/source.csv")
+    assert mock_vector_store.call_args.kwargs["file_name"] == downloaded_path
 
 
 def test_classifai_vector_backend_search_returns_records(tmp_path) -> None:

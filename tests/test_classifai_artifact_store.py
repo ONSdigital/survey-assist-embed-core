@@ -67,3 +67,22 @@ def test_classifai_artifact_store_reads_and_writes_embedding_model_name(
         artifacts.read_embedding_model_name(folder_path=str(folder_path))
         == "all-MiniLM-L6-v2"
     )
+
+
+def test_classifai_artifact_store_writes_metadata_in_single_operation(
+    tmp_path: Path,
+) -> None:
+    folder_path = tmp_path / "vector_store"
+    folder_path.mkdir()
+
+    artifacts.write_vector_store_metadata(
+        folder_path=str(folder_path),
+        index_source_file="source.csv",
+        embedding_model_name="sentence-transformers/all-MiniLM-L6-v2",
+    )
+
+    metadata = json.loads((folder_path / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata == {
+        "index_source_file": "source.csv",
+        "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    }

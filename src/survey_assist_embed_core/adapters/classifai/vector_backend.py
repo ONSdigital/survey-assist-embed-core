@@ -1,5 +1,7 @@
 """ClassifAI implementation of the vector backend port."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import cast
 
 from classifai.indexers import (
@@ -12,11 +14,14 @@ from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
     read_embedding_model_name,
     read_index_source_file,
-    write_embedding_model_name,
-    write_index_source_file,
+    write_vector_store_metadata,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
     NormalisedHFVectoriser,
+)
+from survey_assist_embed_core.adapters.storage import (
+    download_one_file_from_gcs,
+    is_gcs_path,
 )
 from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
@@ -24,31 +29,39 @@ from survey_assist_embed_core.ports import SearchRow, VectorIndex
 DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 
+@contextmanager
+def _resolve_local_path(path: str) -> Iterator[str]:
+    """Yield a local filesystem path, downloading from GCS if necessary."""
+    if is_gcs_path(path):
+        with download_one_file_from_gcs(path) as downloaded:
+            yield downloaded.path
+    else:
+        yield path
+
+
 def build_classifai_vector_store_artifacts(
     *,
-    file_name: str,
+    index_source_file: str,
     output_dir: str,
-    index_source_file: str | None,
     embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
 ) -> None:
-    """Build persisted ClassifAI vector-store artifacts from a CSV file."""
-    vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
-    VectorStore(
-        file_name=file_name,
-        data_type="csv",
-        vectoriser=vectoriser,
-        batch_size=8,
-        meta_data=None,
-        output_dir=output_dir,
-        overwrite=True,
-        hooks=None,
-    )
-    write_index_source_file(
+    """Build persisted ClassifAI vector-store artifacts from a source CSV."""
+    with _resolve_local_path(index_source_file) as local_file:
+        vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
+        VectorStore(
+            file_name=local_file,
+            data_type="csv",
+            vectoriser=vectoriser,
+            batch_size=8,
+            meta_data=None,
+            output_dir=output_dir,
+            overwrite=True,
+            hooks=None,
+        )
+
+    write_vector_store_metadata(
         folder_path=output_dir,
         index_source_file=index_source_file,
-    )
-    write_embedding_model_name(
-        folder_path=output_dir,
         embedding_model_name=embedding_model_name,
     )
 
