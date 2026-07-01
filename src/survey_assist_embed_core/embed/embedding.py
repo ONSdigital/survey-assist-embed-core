@@ -142,14 +142,18 @@ def _sort_and_deduplicate_results(
     items: list[SearchIndexItem],
 ) -> list[SearchIndexItem]:
     """Deduplicate combined-search results and return them in a stable order."""
-    best_by_key: dict[tuple[str, str], SearchIndexItem] = {}
-    for item in items:
-        item_key = (item.code, item.title)
-        existing = best_by_key.get(item_key)
-        if existing is None or item.distance < existing.distance:
-            best_by_key[item_key] = item
-
-    return sorted(
-        best_by_key.values(),
+    sorted_items = sorted(
+        items,
         key=lambda item: (item.distance, item.code, item.title.casefold(), item.title),
     )
+    deduplicated: list[SearchIndexItem] = []
+    seen_keys: set[tuple[str, str]] = set()
+    for item in sorted_items:
+        item_key = (item.code, item.title)
+        if item_key in seen_keys:
+            continue
+
+        seen_keys.add(item_key)
+        deduplicated.append(item)
+
+    return deduplicated
