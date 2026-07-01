@@ -16,6 +16,7 @@ from survey_assist_embed_core.adapters.classifai import (
     build_classifai_vector_store_artifacts,
 )
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
+    _ClassifaiVectorIndex,
     _normalise_model_name,
     _resolve_local_path,
 )
@@ -350,6 +351,14 @@ def test_classifai_vector_backend_search_many_batches_queries(tmp_path) -> None:
             }
         ],
     ]
+
+
+def test_classifai_vector_backend_search_many_returns_empty_for_no_queries() -> None:
+    fake_store = SimpleNamespace(num_vectors=2, search=MagicMock())
+    index = _ClassifaiVectorIndex(fake_store)
+
+    assert index.search_many([], limit=EXPECTED_SEARCH_LIMIT) == []
+    fake_store.search.assert_not_called()
 
 
 def test_classifai_vector_backend_config_reports_loaded_model_name() -> None:
