@@ -6,7 +6,7 @@ from classifai.vectorisers import HuggingFaceVectoriser
 
 # pylint: disable-next=too-few-public-methods
 class NormalisedHFVectoriser(HuggingFaceVectoriser):
-    """Normalise HuggingFace vectors to unit length after embedding."""
+    """HuggingFace vectoriser that normalises embeddings to unit length."""
 
     def _normalize(self, vectors: np.ndarray) -> np.ndarray:
         """Normalise row vectors to unit length."""
@@ -15,7 +15,14 @@ class NormalisedHFVectoriser(HuggingFaceVectoriser):
         return vectors / norms
 
     def transform(self, texts: list[str] | str) -> np.ndarray:
-        """Transform texts into normalised vectors."""
+        """Transform text into unit-normalised embeddings.
+
+        Args:
+            texts: One text string or a list of text strings to embed.
+
+        Returns:
+            A NumPy array containing one normalised embedding per input text.
+        """
         if isinstance(texts, str):
             texts = [texts]
 
