@@ -89,6 +89,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 ## Repository Structure
 
 **Update as the repository evolves**
+An end-to-end cell-based demo is available at `demos/embedding_handler.py`.
 
 ```txt
 survey-assist-embed-core/
