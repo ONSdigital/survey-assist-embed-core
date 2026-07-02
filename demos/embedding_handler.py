@@ -52,9 +52,9 @@ print(handler.get_embed_config().model_dump_json(indent=2))
 
 # %%
 # Run a single-query search.
-single_query = "retail assistant"
-single_results = handler.search_index(single_query)
-print(f"Results for {single_query!r}:")
+SINGLE_QUERY = "retail assistant"
+single_results = handler.search_index(SINGLE_QUERY)
+print(f"Results for {SINGLE_QUERY!r}:")
 print(single_results.model_dump_json(indent=2))
 
 
