@@ -9,6 +9,7 @@ from classifai.indexers import (
     VectorStoreSearchInput,
     VectorStoreSearchOutput,
 )
+from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
@@ -25,6 +26,8 @@ from survey_assist_embed_core.adapters.storage import (
 )
 from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
+
+logger = get_logger(__name__)
 
 _DEFAULT_SENTENCE_TRANSFORMERS_ORG = "sentence-transformers"
 DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = (
@@ -48,6 +51,11 @@ def build_classifai_vector_store_artifacts(
             HuggingFace identifier to use during vectorisation.
     """
     embedding_model_name = _normalise_model_name(embedding_model_name)
+    logger.info(
+        "Starting vector store artifact build",
+        embedding_model_name=embedding_model_name,
+        output_dir=output_dir,
+    )
     with _resolve_local_path(index_source_file) as local_file:
         vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
         VectorStore(
@@ -64,6 +72,11 @@ def build_classifai_vector_store_artifacts(
     write_vector_store_metadata(
         folder_path=output_dir,
         index_source_file=index_source_file,
+        embedding_model_name=embedding_model_name,
+    )
+    logger.info(
+        "Vector store artifacts built successfully",
+        output_dir=output_dir,
         embedding_model_name=embedding_model_name,
     )
 
