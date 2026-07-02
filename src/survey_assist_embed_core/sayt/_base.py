@@ -3,9 +3,16 @@
 import os
 from collections.abc import Iterable, Sequence
 
-from .core import CleanCorpus, validate_max_suggestions, validate_min_chars
-from .retriever_specs import RetrieverSpec, default_retriever_specs
-from .storage import load_corpus_from_csv
+from survey_assist_embed_core.sayt.core import (
+    CleanCorpus,
+    validate_max_suggestions,
+    validate_min_chars,
+)
+from survey_assist_embed_core.sayt.retriever_specs import (
+    RetrieverSpec,
+    default_retriever_specs,
+)
+from survey_assist_embed_core.sayt.storage import load_corpus_from_csv
 
 
 class BaseCorpusBound:  # pylint: disable=too-few-public-methods

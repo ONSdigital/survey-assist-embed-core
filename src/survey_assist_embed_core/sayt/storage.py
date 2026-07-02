@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from .core import (
+from survey_assist_embed_core.sayt.core import (
     CleanCorpus,
     PersistedCorpusRow,
     validate_max_suggestions,
     validate_min_chars,
 )
-from .retriever_specs import (
+from survey_assist_embed_core.sayt.retriever_specs import (
     ArtifactRetrieverSpec,
     NgramRetrieverSpec,
     PrefixRetrieverSpec,

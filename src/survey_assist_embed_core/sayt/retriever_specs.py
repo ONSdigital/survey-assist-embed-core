@@ -7,14 +7,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from .core import CleanCorpus, Suggestion
-from .indexes import (
+from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion
+from survey_assist_embed_core.sayt.indexes import (
     build_ngram_index,
     build_semantic_index,
     load_ngram_index,
     load_semantic_index,
 )
-from .retrievers import NgramRetriever, PrefixRetriever, SemanticRetriever
+from survey_assist_embed_core.sayt.retrievers import (
+    NgramRetriever,
+    PrefixRetriever,
+    SemanticRetriever,
+)
 
 _MIN_NGRAM_SIZE = 2
 _MAX_NGRAM_SIZE = 5

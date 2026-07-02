@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 from uuid import uuid4
 
-from ._base import BaseCorpusBound
-from .storage import (
+from survey_assist_embed_core.sayt._base import BaseCorpusBound
+from survey_assist_embed_core.sayt.storage import (
     build_artifact_manifest,
     build_retriever_artifact,
     write_artifact_corpus,

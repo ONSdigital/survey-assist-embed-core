@@ -6,8 +6,12 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from .core import CleanCorpus, Suggestion, take_with_ties
-from .indexes import DenseVectorIndex, build_ngram_index, build_semantic_index
+from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
+from survey_assist_embed_core.sayt.indexes import (
+    DenseVectorIndex,
+    build_ngram_index,
+    build_semantic_index,
+)
 
 _FUZZY_PREFIX_MIN_RATIO = 0.75
 

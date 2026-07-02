@@ -12,8 +12,8 @@ from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from ._base import BaseCorpusBound
-from .core import (
+from survey_assist_embed_core.sayt._base import BaseCorpusBound
+from survey_assist_embed_core.sayt.core import (
     CleanCorpus,
     SaytArtifactProvenance,
     SaytConfiguration,
@@ -25,8 +25,8 @@ from .core import (
     _normalise,
     take_with_ties,
 )
-from .retriever_specs import Retriever, RetrieverSpec
-from .storage import (
+from survey_assist_embed_core.sayt.retriever_specs import Retriever, RetrieverSpec
+from survey_assist_embed_core.sayt.storage import (
     SAYT_ARTIFACT_TYPE,
     SAYT_ARTIFACT_VERSION,
     StoredRetrieverSpec,
