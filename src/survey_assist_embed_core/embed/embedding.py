@@ -16,6 +16,7 @@ from survey_assist_embed_core.models import (
     EmbeddingStatus,
     SearchIndexItem,
     SearchIndexResponse,
+    VectorBackendConfig,
 )
 from survey_assist_embed_core.ports import SearchRow, VectorBackend, VectorIndex
 
@@ -43,10 +44,6 @@ class EmbeddingHandler:
         self.spell = Speller()
 
         self.vector_store, self.index_source_file = self._load_existing_vector_store()
-
-        logger.info(
-            "Vector backend config", config=self._backend.config.model_dump(mode="json")
-        )
 
         self.index_size = (
             self.vector_store.num_vectors if self.vector_store.num_vectors else 0
@@ -125,10 +122,21 @@ class EmbeddingHandler:
                 f"EmbeddingHandler."
             ) from exc
 
+        backend_config: VectorBackendConfig | None = getattr(
+            self._backend, "config", None
+        )
+        log_data: dict[str, object] = {
+            "db_dir": self.db_dir,
+            "folder_path": folder_path,
+            "index_source_file": index_source_file,
+            "num_vectors": vector_store.num_vectors,
+        }
+        if backend_config is not None:
+            log_data["backend"] = backend_config.model_dump(mode="json")
+
         logger.info(
             "Existing vector store loaded successfully",
-            db_dir=self.db_dir,
-            folder_path=folder_path,
+            **log_data,
         )
         return vector_store, index_source_file
 

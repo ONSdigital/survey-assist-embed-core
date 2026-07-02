@@ -129,7 +129,6 @@ class ClassifaiVectorBackend:
 
     def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
         """Load a ClassifAI vector store from filespace."""
-        logger.debug("Loading ClassifAI vector store", folder_path=folder_path)
         ensure_persisted_vector_store(folder_path=folder_path)
         embedding_model_name = read_embedding_model_name(folder_path=folder_path)
         if embedding_model_name is None:
@@ -146,12 +145,6 @@ class ClassifaiVectorBackend:
             hooks=None,
         )
         index_source_file = read_index_source_file(folder_path=folder_path)
-        logger.info(
-            "ClassifAI vector store loaded successfully",
-            folder_path=folder_path,
-            embedding_model_name=embedding_model_name,
-            num_vectors=store.num_vectors,
-        )
         return _ClassifaiVectorIndex(store), index_source_file
 
     def _set_embedding_model_name(self, embedding_model_name: str) -> None:
