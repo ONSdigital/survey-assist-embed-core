@@ -5,7 +5,7 @@
 from typing import cast
 
 from autocorrect import Speller
-from survey_assist_utils import get_logger
+from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.adapters.classifai import ClassifaiVectorBackend
 from survey_assist_embed_core.adapters.storage import (

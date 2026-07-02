@@ -9,7 +9,7 @@ from typing import Self
 from google.cloud.storage import Client
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
-from survey_assist_utils import get_logger
+from survey_assist_utils.logging import get_logger
 
 logger = get_logger(__name__)
 

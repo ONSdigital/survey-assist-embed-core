@@ -9,7 +9,7 @@ from classifai.indexers import (
     VectorStoreSearchInput,
     VectorStoreSearchOutput,
 )
-from survey_assist_utils import get_logger
+from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
