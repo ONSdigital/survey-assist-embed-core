@@ -26,7 +26,29 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingHandler:
-    """Handle embedding operations for a vector-store backend."""
+    """Load and query a persisted vector store.
+
+    The handler wraps a concrete vector backend, exposes search helpers, and
+    reports the loaded index configuration.
+
+    Attributes:
+        db_dir: Local directory or GCS URI for the persisted vector store.
+        k_matches: Maximum number of matches returned per search.
+        spell: Spell corrector used to expand multi-field search terms.
+        vector_store: Loaded vector index used to execute searches.
+        index_source_file: Recorded source-file path for the loaded index, if
+            available.
+        index_size: Number of vectors in the loaded index.
+
+    Examples:
+        Query a pre-built local vector store:
+
+        ```python
+        handler = EmbeddingHandler(db_dir="vector_store")
+        response = handler.search_index("software developer")
+        print(response.results[0].code)
+        ```
+    """
 
     def __init__(
         self,
@@ -35,7 +57,17 @@ class EmbeddingHandler:
         *,
         backend: VectorBackend | None = None,
     ):
-        """Initialise the handler for a pre-built vector store."""
+        """Initialise the handler for a pre-built vector store.
+
+        Args:
+            db_dir: Local directory or GCS URI for the persisted vector store.
+            k_matches: Maximum number of matches to return per search.
+            backend: Optional vector backend implementation. When omitted, a
+                ``ClassifaiVectorBackend`` is created.
+
+        Raises:
+            ValueError: If the persisted vector store contains no vectors.
+        """
         self.k_matches = k_matches
         self.db_dir = db_dir
         self._backend = backend if backend is not None else ClassifaiVectorBackend()
@@ -60,14 +92,33 @@ class EmbeddingHandler:
         )
 
     def search_index(self, query: str) -> SearchIndexResponse:
-        """Return the nearest index entries for a query string."""
+        """Search the loaded index for a single query string.
+
+        Args:
+            query: Search text to submit to the vector backend.
+
+        Returns:
+            A response containing up to ``k_matches`` ranked results.
+        """
         n_results = min(self.index_size, self.k_matches)
         rows = self.vector_store.search(query, limit=n_results)
 
         return SearchIndexResponse(results=_rows_to_search_items(rows))
 
     def search_index_multi(self, query: list[str | None]) -> SearchIndexResponse:
-        """Return the nearest index entries for combined query fields."""
+        """Search the loaded index using cumulative query fragments.
+
+        Each non-``None`` input value is appended to the cumulative search
+        phrase, and both the raw phrase and its spell-corrected form are
+        queried before the combined results are sorted and deduplicated.
+
+        Args:
+            query: Ordered query parts. ``None`` values are ignored.
+
+        Returns:
+            A response containing stable, deduplicated search results across
+            all generated query variants.
+        """
         query_terms = [value for value in query if value is not None]
         if not query_terms:
             return SearchIndexResponse(results=[])
@@ -89,7 +140,12 @@ class EmbeddingHandler:
         return SearchIndexResponse(results=_sort_and_deduplicate_results(short_list))
 
     def get_embed_config(self) -> EmbeddingStatus:
-        """Return the current embedding configuration and ready status."""
+        """Return the runtime configuration for the loaded index.
+
+        Returns:
+            A ready-state ``EmbeddingStatus`` describing the active backend and
+            index.
+        """
         return EmbeddingStatus(
             db_dir=self.db_dir,
             k_matches=self.k_matches,

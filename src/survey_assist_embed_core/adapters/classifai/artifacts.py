@@ -15,12 +15,20 @@ def write_vector_store_metadata(
     index_source_file: str | None,
     embedding_model_name: str | None,
 ) -> None:
-    """Write or update persisted vector-store metadata in a single operation.
+    """Write project metadata into a persisted vector-store folder.
 
-    classifai's VectorStore replaces metadata.json entirely when it builds, so
-    any keys already present before this call were written by classifai.  If any
-    of our keys collide with those we raise immediately rather than silently
-    overwriting classifai-owned data.
+    classifai rewrites ``metadata.json`` when it builds a vector store, so this
+    helper only adds the project-specific keys after verifying that those keys
+    are not already present.
+
+    Args:
+        folder_path: Folder that contains the persisted vector-store artifacts.
+        index_source_file: Original source-file path to record in the metadata.
+        embedding_model_name: Embedding model identifier to record.
+
+    Raises:
+        ValueError: If the metadata file already contains one of the reserved
+            project keys.
     """
     our_keys = {INDEX_SOURCE_FILE_KEY, EMBEDDING_MODEL_NAME_KEY}
     existing = set(_read_metadata(folder_path).keys())
@@ -38,7 +46,16 @@ def write_vector_store_metadata(
 
 
 def ensure_persisted_vector_store(*, folder_path: str) -> None:
-    """Raise when the folder is missing the persisted files for this layout."""
+    """Validate that a folder contains the expected persisted artifacts.
+
+    Args:
+        folder_path: Folder expected to contain the persisted vector-store
+            files.
+
+    Raises:
+        FileNotFoundError: If the folder is missing one or more required
+            persisted artifacts.
+    """
     if _has_persisted_vector_store(folder_path):
         return
 
@@ -50,13 +67,29 @@ def ensure_persisted_vector_store(*, folder_path: str) -> None:
 
 
 def read_index_source_file(*, folder_path: str) -> str | None:
-    """Read the original source-file path from persisted metadata."""
+    """Read the recorded source-file path from persisted metadata.
+
+    Args:
+        folder_path: Folder that contains the persisted vector-store artifacts.
+
+    Returns:
+        The source-file path recorded in metadata, or ``None`` when the value
+        is absent.
+    """
     metadata = _read_metadata(folder_path)
     return metadata.get(INDEX_SOURCE_FILE_KEY)
 
 
 def read_embedding_model_name(*, folder_path: str) -> str | None:
-    """Read the embedding model name from persisted metadata."""
+    """Read the recorded embedding model name from persisted metadata.
+
+    Args:
+        folder_path: Folder that contains the persisted vector-store artifacts.
+
+    Returns:
+        The embedding model name recorded in metadata, or ``None`` when the
+        value is absent.
+    """
     metadata = _read_metadata(folder_path)
     return metadata.get(EMBEDDING_MODEL_NAME_KEY)
 

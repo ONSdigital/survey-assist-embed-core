@@ -38,7 +38,15 @@ def build_classifai_vector_store_artifacts(
     output_dir: str,
     embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
 ) -> None:
-    """Build persisted ClassifAI vector-store artifacts from a source CSV."""
+    """Build persisted ClassifAI vector-store artifacts from a source file.
+
+    Args:
+        index_source_file: Local path or GCS URI for the CSV source data.
+        output_dir: Directory where the persisted vector-store artifacts are
+            written.
+        embedding_model_name: Embedding model name or fully qualified
+            HuggingFace identifier to use during vectorisation.
+    """
     embedding_model_name = _normalise_model_name(embedding_model_name)
     with _resolve_local_path(index_source_file) as local_file:
         vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
@@ -97,7 +105,11 @@ class _ClassifaiVectorIndex:
 
 
 class ClassifaiVectorBackend:
-    """ClassifAI implementation of the vector backend port."""
+    """Vector backend that loads persisted ClassifAI search artifacts.
+
+    The backend reads persisted metadata, constructs the query vectoriser, and
+    returns a loaded index that satisfies the vector-backend protocol.
+    """
 
     def __init__(self):
         """Initialise an unloaded backend waiting for persisted metadata."""
@@ -115,7 +127,20 @@ class ClassifaiVectorBackend:
         )
 
     def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
-        """Load a ClassifAI vector store from filespace."""
+        """Load a persisted ClassifAI vector store from a local folder.
+
+        Args:
+            folder_path: Local folder containing the persisted vector-store
+                artifacts.
+
+        Returns:
+            A tuple of the loaded vector index and the recorded source-file
+            path, if available.
+
+        Raises:
+            FileNotFoundError: If the persisted vector store does not contain
+                embedding model metadata.
+        """
         ensure_persisted_vector_store(folder_path=folder_path)
         embedding_model_name = read_embedding_model_name(folder_path=folder_path)
         if embedding_model_name is None:

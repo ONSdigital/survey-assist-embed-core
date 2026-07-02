@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DownloadedVectorStore:
-    """Represent a vector store or source file downloaded into a temp directory."""
+    """Downloaded vector-store asset backed by a temporary directory.
+
+    Attributes:
+        path: Local filesystem path to the downloaded file or directory.
+        temp_dir: Temporary directory that owns the downloaded data.
+    """
 
     path: str
     temp_dir: tempfile.TemporaryDirectory[str]
@@ -41,12 +46,28 @@ class DownloadedVectorStore:
 
 
 def is_gcs_path(path: str) -> bool:
-    """Return whether a path is a ``gs://`` URI."""
+    """Return whether a path uses the ``gs://`` scheme."""
     return path.startswith("gs://")
 
 
 def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
-    """Parse ``gs://bucket/path`` into ``(bucket_name, path)``."""
+    """Split a GCS URI into its bucket name and object path.
+
+    Args:
+        gcs_uri: URI in ``gs://bucket/path`` or ``gs://bucket`` form.
+
+    Returns:
+        A tuple of the bucket name and object path. The path component is an
+        empty string when the URI points at the bucket root.
+
+    Raises:
+        ValueError: If ``gcs_uri`` does not start with ``gs://`` or omits the
+            bucket name.
+
+    Examples:
+        >>> parse_gcs_uri("gs://my-bucket/path/to/store")
+        ('my-bucket', 'path/to/store')
+    """
     if not gcs_uri.startswith("gs://"):
         raise ValueError(f"Not a valid GCS URI: {gcs_uri}")
 
@@ -62,7 +83,19 @@ def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
 
 
 def download_vector_store_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
-    """Download all files under a GCS store path into a temp directory."""
+    """Download vector-store artifacts from GCS into a temporary directory.
+
+    Args:
+        gcs_uri: GCS URI for the bucket root or folder that stores the vector
+            store artifacts.
+
+    Returns:
+        A downloaded vector store that can clean up its temporary directory via
+        ``cleanup()`` or as a context manager.
+
+    Raises:
+        FileNotFoundError: If the URI resolves to no downloadable files.
+    """
     bucket_name, prefix = parse_gcs_uri(gcs_uri)
     blob_prefix = f"{prefix}/" if prefix else ""
 
@@ -101,7 +134,18 @@ def download_vector_store_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
 
 
 def download_one_file_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
-    """Download one file from GCS into a temporary directory."""
+    """Download one file from GCS into a temporary directory.
+
+    Args:
+        gcs_uri: GCS URI for the file to download.
+
+    Returns:
+        A downloaded file handle that cleans up its temporary directory via
+        ``cleanup()`` or as a context manager.
+
+    Raises:
+        FileNotFoundError: If the URI does not resolve to an existing file.
+    """
     bucket_name, blob_name = parse_gcs_uri(gcs_uri)
 
     client = Client()
