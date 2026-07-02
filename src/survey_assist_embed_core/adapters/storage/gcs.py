@@ -1,6 +1,5 @@
 """GCS helpers for retrieval asset access."""
 
-import logging
 import os
 import tempfile
 from dataclasses import dataclass
@@ -10,8 +9,9 @@ from typing import Self
 from google.cloud.storage import Client
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
+from survey_assist_utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -92,9 +92,9 @@ def download_vector_store_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
         raise FileNotFoundError(f"No files found in GCS store path: {gcs_uri}")
 
     logger.info(
-        "Downloaded vector store from %s to local directory %s.",
-        gcs_uri,
-        local_dir,
+        "Downloaded vector store from GCS to local directory.",
+        uri=gcs_uri,
+        local_dir=local_dir,
     )
 
     return DownloadedVectorStore(path=local_dir, temp_dir=temp_dir)
@@ -116,9 +116,9 @@ def download_one_file_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
     blob.download_to_filename(local_path)
 
     logger.info(
-        "Downloaded file from %s to local path %s.",
-        gcs_uri,
-        local_path,
+        "Downloaded file from GCS to local path.",
+        uri=gcs_uri,
+        local_path=local_path,
     )
 
     return DownloadedVectorStore(path=local_path, temp_dir=temp_dir)
