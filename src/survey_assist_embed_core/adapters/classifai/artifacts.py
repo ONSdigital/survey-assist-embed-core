@@ -15,10 +15,10 @@ def write_vector_store_metadata(
     index_source_file: str | None,
     embedding_model_name: str | None,
 ) -> None:
-    """Write project metadata into a persisted vector-store folder.
+    """Write extended classifai metadata into a persisted vector-store folder.
 
     classifai rewrites ``metadata.json`` when it builds a vector store, so this
-    helper only adds the project-specific keys after verifying that those keys
+    helper only adds the extended keys after verifying that those keys
     are not already present.
 
     Args:
@@ -28,7 +28,7 @@ def write_vector_store_metadata(
 
     Raises:
         ValueError: If the metadata file already contains one of the reserved
-            project keys.
+            extended keys.
     """
     our_keys = {INDEX_SOURCE_FILE_KEY, EMBEDDING_MODEL_NAME_KEY}
     existing = set(_read_metadata(folder_path).keys())
