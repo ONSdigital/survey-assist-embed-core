@@ -28,7 +28,7 @@ SAYT_ARTIFACT_TYPE = "sayt"
 SAYT_ARTIFACT_VERSION = 2
 MANIFEST_FILE_NAME = "manifest.json"
 CORPUS_FILE_NAME = "corpus.csv"
-_ARTIFACT_CORPUS_FIELDS = ["row_id", "search_text", "display_text"]
+_ARTIFACT_CORPUS_FIELDS = ["search_text", "display_text"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,11 +106,10 @@ def write_artifact_corpus(corpus: CleanCorpus, *, artifact_dir: str | Path) -> P
         writer.writeheader()
         writer.writerows(
             {
-                "row_id": row_id,
                 "search_text": search_text,
                 "display_text": display_text,
             }
-            for row_id, search_text, display_text in corpus.rows
+            for search_text, display_text in corpus.rows
         )
     return output_path
 
@@ -129,7 +128,6 @@ def read_artifact_corpus(
         reader = csv.DictReader(csv_file)
         return [
             PersistedCorpusRow(
-                row_id=row["row_id"],
                 search_text=row["search_text"],
                 display_text=row["display_text"],
             )

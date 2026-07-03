@@ -18,7 +18,7 @@ from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 
-from survey_assist_embed_core.sayt.core import CleanCorpus, take_with_ties
+from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
 
 def _silent_tqdm(iterable, **_kwargs):
@@ -44,6 +44,7 @@ class DenseVectorIndex:
     _vector_store: VectorStore
     _num_vectors: int
     _corpus: CleanCorpus
+    _max_duplication: int = 1
 
     @classmethod
     def from_corpus(
@@ -94,6 +95,7 @@ class DenseVectorIndex:
             _vector_store=vector_store,
             _num_vectors=int(vector_store.num_vectors or 0),
             _corpus=corpus,
+            _max_duplication=max(corpus.display_text_count.values(), default=1),
         )
 
     @classmethod
@@ -126,6 +128,7 @@ class DenseVectorIndex:
             _vector_store=vector_store,
             _num_vectors=int(vector_store.num_vectors or 0),
             _corpus=corpus,
+            _max_duplication=max(corpus.display_text_count.values(), default=1),
         )
 
     @staticmethod
@@ -140,11 +143,11 @@ class DenseVectorIndex:
             writer = csv.DictWriter(csvfile, fieldnames=["label", "text"])
             writer.writeheader()
             writer.writerows(
-                {"label": row_id, "text": search_text}
-                for row_id, search_text, _ in corpus.rows
+                {"label": display_text, "text": search_text}
+                for search_text, display_text in corpus.rows
             )
 
-    def query(self, q_norm: str, num_suggestions: int) -> list[tuple[str, float]]:
+    def query(self, q_norm: str, num_suggestions: int) -> list[Suggestion]:
         """Query the dense index with a normalised string.
 
         Args:
@@ -160,19 +163,24 @@ class DenseVectorIndex:
 
         start_time = time.time()
 
-        n_results = min(self._num_vectors, num_suggestions * 2)
+        n_results = min(self._num_vectors, num_suggestions * self._max_duplication)
         search_input = VectorStoreSearchInput({"id": ["q1"], "query": [q_norm]})
         with _silence_classifai_tqdm():
             results = self._vector_store.search(search_input, n_results=n_results)
 
         labels = results["doc_label"].tolist()
         scores = results["score"].tolist()
-        out = list(zip(labels, scores, strict=True))
+        suggestions = [
+            Suggestion(display_text=label, score=score)
+            for label, score in zip(labels, scores, strict=True)
+        ]
 
         elapsed = time.time() - start_time
-        print(f"  -> search done in {elapsed * 1000:.2f}ms)")
+        print(
+            f"  -> search done in {elapsed * 1000:.2f}ms  with {len(suggestions)} results {n_results}"
+        )
 
-        return take_with_ties(out, limit=num_suggestions)
+        return take_with_ties(suggestions, limit=num_suggestions)
 
 
 class _L2NormalisingVectoriser(VectoriserBase):
@@ -239,7 +247,7 @@ def build_ngram_index(
     return DenseVectorIndex.from_corpus(
         corpus=corpus,
         vectoriser=_CharNgramVectoriser(
-            [search for _, search, _ in corpus.rows],
+            [search for search, _ in corpus.rows],
             n=n,
             max_df=max_df,
         ),
@@ -260,7 +268,7 @@ def load_ngram_index(
         corpus=corpus,
         folder_path=folder_path,
         vectoriser=_CharNgramVectoriser(
-            [search for _, search, _ in corpus.rows],
+            [search for search, _ in corpus.rows],
             n=n,
             max_df=max_df,
         ),

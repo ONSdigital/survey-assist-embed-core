@@ -34,10 +34,10 @@ class Retriever(Protocol):
 
         Args:
             q_norm: Normalised query text.
-            num_suggestions: Maximum number of scored suggestions to return.
+            num_suggestions: Maximum number of scored results to return.
 
         Returns:
-            Ranked ``Suggestion`` objects for the query.
+            ``(row_id, score)`` pairs ranked by descending score.
         """
 
 

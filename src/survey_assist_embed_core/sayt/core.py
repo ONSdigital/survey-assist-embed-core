@@ -7,7 +7,6 @@ import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, cast
-from uuid import NAMESPACE_URL, uuid5
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -25,15 +24,10 @@ def _normalise(text: object) -> str:
     return text
 
 
-def _row_uid(index: int, search_text: str, display_text: str) -> str:
-    return str(uuid5(NAMESPACE_URL, f"{index}\0{search_text}\0{display_text}"))
-
-
 @dataclass(frozen=True, slots=True)
 class PersistedCorpusRow:
     """Represent a persisted SAYT corpus row restored from artifact storage."""
 
-    row_id: str
     search_text: str
     display_text: str
 
@@ -46,10 +40,8 @@ class CleanCorpus(BaseModel):
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    rows: list[tuple[str, str, str]] = Field(default_factory=list)
+    rows: list[tuple[str, str]] = Field(default_factory=list)
     size: int = 0
-    _id_to_search: dict[str, str] = PrivateAttr(default_factory=dict)
-    _id_to_display: dict[str, str] = PrivateAttr(default_factory=dict)
     _display_text_count: dict[str, int] = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="before")
@@ -70,16 +62,6 @@ class CleanCorpus(BaseModel):
         }
 
     @property
-    def id_to_search(self) -> dict[str, str]:
-        """Return the row-id to normalised-search-text lookup."""
-        return self._id_to_search
-
-    @property
-    def id_to_display(self) -> dict[str, str]:
-        """Return the row-id to display-text lookup."""
-        return self._id_to_display
-
-    @property
     def display_text_count(self) -> dict[str, int]:
         """Return per-display-text occurrence counts for the cleaned corpus."""
         return self._display_text_count
@@ -92,10 +74,8 @@ class CleanCorpus(BaseModel):
 
     def _populate_indexes(self) -> "CleanCorpus":
         """Rebuild lookup tables from the current cleaned rows."""
-        self._id_to_search = {rid: search for rid, search, _ in self.rows}
-        self._id_to_display = {rid: display for rid, _, display in self.rows}
         self._display_text_count = {}
-        for _, _, display in self.rows:
+        for _, display in self.rows:
             self._display_text_count[display] = (
                 self._display_text_count.get(display, 0) + 1
             )
@@ -105,17 +85,16 @@ class CleanCorpus(BaseModel):
     @classmethod
     def from_persisted_rows(
         cls,
-        rows: Iterable[PersistedCorpusRow | tuple[str, str, str]],
+        rows: Iterable[PersistedCorpusRow | tuple[str, str]],
     ) -> "CleanCorpus":
-        """Restore a cleaned corpus from persisted row identifiers and text.
+        """Restore a cleaned corpus from persisted search and display text pairs.
 
         Args:
-            rows: Persisted ``(row_id, search_text, display_text)`` triples or
+            rows: Persisted ``(search_text, display_text)`` pairs or
                 ``PersistedCorpusRow`` objects.
 
         Returns:
-            A ``CleanCorpus`` whose row identifiers and lookup maps match the
-            persisted artifact data exactly.
+            A ``CleanCorpus`` whose rows match the persisted artifact data.
 
         Raises:
             ValueError: If no persisted rows are supplied.
@@ -128,18 +107,18 @@ class CleanCorpus(BaseModel):
 
     @staticmethod
     def _coerce_persisted_row(
-        row: PersistedCorpusRow | tuple[str, str, str],
-    ) -> tuple[str, str, str]:
+        row: PersistedCorpusRow | tuple[str, str],
+    ) -> tuple[str, str]:
         """Convert persisted row data into the internal tuple format."""
         if isinstance(row, PersistedCorpusRow):
-            return (row.row_id, row.search_text, row.display_text)
-        row_id, search_text, display_text = row
-        return (str(row_id), str(search_text), str(display_text))
+            return (row.search_text, row.display_text)
+        search_text, display_text = row
+        return (str(search_text), str(display_text))
 
     @staticmethod
     def _clean_corpus(
         corpus: Iterable[str] | Iterable[tuple[object, object]],
-    ) -> list[tuple[str, str, str]]:
+    ) -> list[tuple[str, str]]:
         if not isinstance(corpus, Iterable):
             raise TypeError(
                 "corpus must be an iterable of strings or (string, original) tuples"
@@ -164,10 +143,7 @@ class CleanCorpus(BaseModel):
             cleaned.append((text, display))
         if not cleaned:
             raise ValueError("corpus is empty after filtering")
-        return [
-            (_row_uid(i, norm, display), norm, display)
-            for i, (norm, display) in enumerate(cleaned)
-        ]
+        return cleaned
 
 
 def _coerce_sayt_int_setting(value: object, *, field_name: str) -> int:
@@ -263,28 +239,25 @@ class SaytConfiguration(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class Suggestion:
-    """Represent a SAYT match with score and row metadata.
-
-    The meaning of ``score`` depends on the producer. Concrete retrievers emit
-    strategy-local scores, while ``SAYTSuggester.suggest_with_scores`` returns
-    the combined weighted score.
-    """
+    """Represent a SAYT match with its display text and combined score."""
 
     display_text: str
     score: float
-    search_text: str = ""
-    row_id: str = ""
 
 
 def take_with_ties(
-    items: list[tuple[str, float]],
+    items: list[Suggestion],
     limit: int,
-) -> list[tuple[str, float]]:
+    display_text_count: dict[str, int] | None = None,
+) -> list[Suggestion]:
     """Return the first ``limit`` items and any later items tied on score.
 
     Args:
-        items: Scored ``(key, score)`` pairs to rank.
+        items: Scored ``Suggestion`` objects to rank.
         limit: Maximum number of leading items before tie extension is applied.
+        display_text_count: Optional mapping of display text to occurrence counts
+            in the corpus. If provided, items whose display text occurs more than
+            once will be considered for higher priority.
 
     Returns:
         The highest-scoring items up to ``limit``, plus any later items that are
@@ -292,17 +265,23 @@ def take_with_ties(
     """
     if limit < 1 or not items:
         return []
+    if display_text_count is None:
+        display_text_count = {}
 
     items = sorted(
         items,
-        key=lambda kv: -kv[1],
+        key=lambda kv: (
+            -kv.score,
+            -display_text_count.get(kv.display_text, 0),
+            kv.display_text.lower(),
+        ),
     )
 
     if limit >= len(items):
         return items
 
-    cutoff_score = float(items[limit - 1][1])
+    cutoff_score = float(items[limit - 1].score)
     end = limit
-    while end < len(items) and float(items[end][1]) == cutoff_score:
+    while end < len(items) and float(items[end].score) == cutoff_score:
         end += 1
     return items[:end]

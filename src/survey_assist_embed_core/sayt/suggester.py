@@ -124,7 +124,6 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             max_suggestions=max_suggestions,
         )
         self._retrievers = self._build_retrievers(self._retriever_specs)
-        self._max_duplication = max(self._corpus.display_text_count.values(), default=0)
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
         logger.info("SAYT suggester initialized")
@@ -146,7 +145,6 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         suggester._corpus = corpus
         suggester._min_chars = min_chars
         suggester._max_suggestions = max_suggestions
-        suggester._max_duplication = max(corpus.display_text_count.values(), default=0)
         suggester._retriever_specs = tuple(retriever_specs)
         suggester._retrievers = retrievers
         suggester._stored_retrievers = (
@@ -209,46 +207,22 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             for spec, weight in _normalised_retriever_specs(retriever_specs)
         ]
 
-    def _dedup_suggestions(
-        self, suggestions: list[Suggestion]
-    ) -> list[tuple[str, float]]:
-        # sort by score and deduplicate by display text, keeping the highest-scoring variant.
-        sorted_suggestions = sorted(
-            suggestions,
-            key=lambda s: (
-                -s.score,
-                -self._corpus.display_text_count.get(s.display_text, 0),
-                s.display_text.lower(),
-                s.row_id,
-            ),
-        )
-        seen: set[str] = set()
-        deduped: list[tuple[str, float]] = []
-        for s in sorted_suggestions:
-            display_text = s.display_text
-            if display_text not in seen:
-                deduped.append((display_text, s.score))
-                seen.add(display_text)
-        return deduped
-
     def _combine_suggestions(
         self,
         result_groups: Iterable[tuple[float, list[Suggestion]]],
-    ) -> list[tuple[str, float]]:
+    ) -> list[Suggestion]:
         def normalise_scores(
             items: list[Suggestion], weight: float
         ) -> dict[str, float]:
             if not items:
                 return {}
-            max_score = max((float(s.score) for s in items), default=0.0)
+            max_score = max((s.score for s in items), default=0.0)
             if max_score <= 0:
                 return {}
             out: dict[str, float] = {}
             for s in items:
-                if not s.row_id:
-                    continue
-                out[s.row_id] = max(
-                    out.get(s.row_id, 0.0), float(s.score) / max_score * weight
+                out[s.display_text] = max(
+                    out.get(s.display_text, 0.0), s.score / max_score * weight
                 )
             return out
 
@@ -258,7 +232,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             for k, v in d.items():
                 combined_scores[k] = combined_scores.get(k, 0.0) + v
 
-        return [(row_id, float(score)) for row_id, score in combined_scores.items()]
+        return [Suggestion(display_text=k, score=v) for k, v in combined_scores.items()]
 
     def _collect_retriever_results(
         self, q_norm: str, num_suggestions: int
@@ -277,7 +251,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 )
             )
             elapsed_time = time.time() - start_time
-            print(f"  -> query time: {elapsed_time * 1000:.2f} milliseconds")
+            print(
+                f"  -> query time: {elapsed_time * 1000:.2f} milliseconds with {len(result)} results"
+            )
 
         return result
 
@@ -304,22 +280,14 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
 
         results_by_kind = self._collect_retriever_results(
             q_norm,
-            num_suggestions=10 * num_suggestions,
+            num_suggestions=num_suggestions * 5,
+            # collect more to allow pairing up scores with other retrievers
         )
 
         combined_result = self._combine_suggestions(results_by_kind)
-        ranked_results = take_with_ties(combined_result, num_suggestions)
-        out = [
-            Suggestion(
-                row_id=row_id,
-                display_text=self._corpus.id_to_display.get(row_id, ""),
-                score=score,
-                search_text=self._corpus.id_to_search.get(row_id, ""),
-            )
-            for row_id, score in ranked_results
-        ]
-
-        return out
+        return take_with_ties(
+            combined_result, num_suggestions, self._corpus.display_text_count
+        )
 
     def suggest(
         self, query: str | None, num_suggestions: int | None = None
@@ -339,16 +307,11 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
 
         if num_suggestions is None:
             num_suggestions = self._max_suggestions
-        results = self.suggest_with_scores(
-            query, num_suggestions=num_suggestions * self._max_duplication
-        )
-        dedup_results = self._dedup_suggestions(results)
-        ranked_results = take_with_ties(dedup_results, num_suggestions)
-
+        results = self.suggest_with_scores(query, num_suggestions=num_suggestions)
         elapsed_time = time.time() - start_time
         print(f"Suggest query time: {elapsed_time * 1000:.2f} milliseconds")
 
-        return [result[0] for result in ranked_results]
+        return [s.display_text for s in results]
 
     def get_config(self) -> SaytConfiguration:
         """Return a rich runtime summary of this suggester.
@@ -386,7 +349,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             corpus=SaytCorpusSummary(
                 size=self._corpus.size,
                 unique_display_texts=len(self._corpus.display_text_count),
-                max_duplication=self._max_duplication,
+                max_duplication=max(
+                    self._corpus.display_text_count.values(), default=0
+                ),
             ),
             retrievers=retrievers,
             artifact_provenance=(

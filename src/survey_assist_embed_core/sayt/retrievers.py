@@ -45,12 +45,12 @@ class PrefixRetriever:
         sorted_terms: list[tuple[str, str]] = []
         token_index: dict[str, set[str]] = {}
 
-        for row_id, search_norm, _ in corpus.rows:
-            sorted_terms.append((search_norm, row_id))
+        for search_norm, display in corpus.rows:
+            sorted_terms.append((search_norm, display))
             for token in search_norm.split():
                 for i in range(1, min(len(token), len(search_norm)) + 1):
                     prefix_str = token[:i]
-                    token_index.setdefault(prefix_str, set()).add(row_id)
+                    token_index.setdefault(prefix_str, set()).add(display)
 
         sorted_terms.sort(key=lambda x: x[0])
         prefix_terms = [s for s, _ in sorted_terms]
@@ -67,11 +67,11 @@ class PrefixRetriever:
 
         Args:
             q_norm: Normalised query text.
-            num_suggestions: Maximum number of scored suggestions to return
-                before tie expansion.
+            num_suggestions: Maximum number of scored results to return before
+                tie expansion.
 
         Returns:
-            Ranked ``Suggestion`` objects scored by prefix heuristics.
+            Ranked ``(display_text, score)`` pairs scored by prefix heuristics.
         """
         if len(q_norm) < self._min_chars:
             return []
@@ -94,16 +94,11 @@ class PrefixRetriever:
             if ratio >= _FUZZY_PREFIX_MIN_RATIO:
                 scores[row_id] = scores.get(row_id, 0.0) + (2.4 * ratio)
 
-        ranked = take_with_ties(list(scores.items()), limit=num_suggestions)
-        return [
-            Suggestion(
-                display_text=self._corpus.id_to_display.get(row_id, ""),
-                score=float(score),
-                search_text=self._corpus.id_to_search.get(row_id, ""),
-                row_id=row_id,
-            )
-            for row_id, score in ranked
+        suggestions = [
+            Suggestion(display_text=display, score=score)
+            for display, score in scores.items()
         ]
+        return take_with_ties(suggestions, limit=num_suggestions)
 
 
 class _DenseRetriever:
@@ -131,18 +126,10 @@ class _DenseRetriever:
     def suggest_with_scores(
         self, q_norm: str, num_suggestions: int
     ) -> list[Suggestion]:
-        """Return dense-vector matches after applying retriever-level gating."""
+        """Return dense-vector suggestions after applying retriever-level gating."""
         if len(q_norm) < self._min_chars:
             return []
-        return [
-            Suggestion(
-                display_text=self._corpus.id_to_display.get(row_id, ""),
-                score=score,
-                search_text=self._corpus.id_to_search.get(row_id, ""),
-                row_id=row_id,
-            )
-            for row_id, score in self._index.query(q_norm, num_suggestions)
-        ]
+        return self._index.query(q_norm, num_suggestions)
 
 
 class NgramRetriever(_DenseRetriever):
