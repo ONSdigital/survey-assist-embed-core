@@ -1,7 +1,7 @@
 # pylint: disable=too-few-public-methods
 
 """Dense index construction helpers for SAYT retrievers."""
-
+import time
 import csv
 import os
 import tempfile
@@ -157,14 +157,20 @@ class DenseVectorIndex:
         if self._num_vectors < 1 or num_suggestions < 1:
             return []
 
+        start_time = time.time()
+        
         n_results = min(self._num_vectors, num_suggestions * 2)
         search_input = VectorStoreSearchInput({"id": ["q1"], "query": [q_norm]})
         with _silence_classifai_tqdm():
             results = self._vector_store.search(search_input, n_results=n_results)
-        out = [
-            (row["doc_label"], float(row["score"]))
-            for row in results.to_dict(orient="records")
-        ]
+                        
+        labels = results["doc_label"].tolist()
+        scores = results["score"].tolist()
+        out = list(zip(labels, scores))
+
+        elapsed = time.time() - start_time
+        print(f"  -> search done in {elapsed * 1000:.2f}ms)")
+
         return take_with_ties(out, limit=num_suggestions)
 
 

@@ -3,7 +3,7 @@
 This module provides the public suggester API that coordinates configured
 retrievers and combines their scores into ranked suggestions.
 """
-
+import time
 import logging
 import math
 import os
@@ -262,16 +262,20 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
     def _collect_retriever_results(
         self, q_norm: str, num_suggestions: int
     ) -> list[tuple[float, list[Suggestion]]]:
-        return [
-            (
+        result = []
+        for configured_retriever in self._retrievers:
+            start_time = time.time()
+            print(f"Running {configured_retriever.retriever.__class__.__name__}...")
+            result.append((
                 configured_retriever.weight,
                 configured_retriever.retriever.suggest_with_scores(
-                    q_norm,
-                    num_suggestions=num_suggestions,
-                ),
-            )
-            for configured_retriever in self._retrievers
-        ]
+                q_norm,
+                num_suggestions=num_suggestions,
+            )))
+            elapsed_time = time.time() - start_time
+            print(f"  -> query time: {elapsed_time*1000:.2f} milliseconds")
+
+        return result
 
     def suggest_with_scores(
         self, query: str | None, num_suggestions: int | None = None
@@ -327,6 +331,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             A list of display-text suggestions ordered by descending combined
             score, while preserving ties at the cutoff.
         """
+        start_time = time.time()
+        
         if num_suggestions is None:
             num_suggestions = self._max_suggestions
         results = self.suggest_with_scores(
@@ -334,6 +340,10 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         )
         dedup_results = self._dedup_suggestions(results)
         ranked_results = take_with_ties(dedup_results, num_suggestions)
+
+        elapsed_time = time.time() - start_time
+        print(f"Suggest query time: {elapsed_time*1000:.2f} milliseconds")
+
         return [result[0] for result in ranked_results]
 
     def get_config(self) -> SaytConfiguration:
