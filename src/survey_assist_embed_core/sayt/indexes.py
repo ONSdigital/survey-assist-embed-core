@@ -40,6 +40,19 @@ def _silence_classifai_tqdm():
         classifai_indexers_main.tqdm = previous_tqdm
 
 
+def _derive_num_retrieved_based_on_duplication(
+    n_suggestions: int, max_duplication: int, corpus_size: int
+) -> int:
+    """Return the maximum number of times a display text can appear in the corpus."""
+    if n_suggestions < 1 or corpus_size < 1:
+        return 0
+
+    dumpen_max_duplication = int(np.log2(max(max_duplication, 1)) + 1)
+
+    out = min(corpus_size, n_suggestions * dumpen_max_duplication)
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class DenseVectorIndex:
     """Wrap a ClassifAI vector store for query-time dense retrieval."""
@@ -166,10 +179,12 @@ class DenseVectorIndex:
 
         start_time = time.time()
 
-        n_results = min(self._num_vectors, num_suggestions * self._max_duplication)
+        num_results = _derive_num_retrieved_based_on_duplication(
+            num_suggestions, self._max_duplication, self._num_vectors
+        )
         search_input = VectorStoreSearchInput({"id": ["q1"], "query": [q_norm]})
         with _silence_classifai_tqdm():
-            results = self._vector_store.search(search_input, n_results=n_results)
+            results = self._vector_store.search(search_input, n_results=num_results)
 
         labels = results["doc_label"].tolist()
         scores = results["score"].tolist()
@@ -177,16 +192,15 @@ class DenseVectorIndex:
             Suggestion(display_text=label, score=score)
             for label, score in zip(labels, scores, strict=True)
         ]
-
-        elapsed = time.time() - start_time
+        out = take_with_ties(suggestions, limit=num_suggestions)
+        elapsed_time = time.time() - start_time
         logger.debug(
             "Dense index query time (low level)",
-            query_time=elapsed * 1000,
-            num_suggestions=num_suggestions,
-            n_results=n_results,
+            query_time=elapsed_time * 1000,
+            num_suggestions_requested=num_results,
+            num_suggestions_returned=len(suggestions),
         )
-
-        return take_with_ties(suggestions, limit=num_suggestions)
+        return out
 
 
 class _L2NormalisingVectoriser(VectoriserBase):
