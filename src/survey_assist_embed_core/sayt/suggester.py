@@ -4,7 +4,6 @@ This module provides the public suggester API that coordinates configured
 retrievers and combines their scores into ranked suggestions.
 """
 
-import logging
 import math
 import os
 import time
@@ -12,6 +11,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
+
+from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.sayt._base import BaseCorpusBound
 from survey_assist_embed_core.sayt.core import (
@@ -36,7 +37,7 @@ from survey_assist_embed_core.sayt.storage import (
     read_artifact_manifest,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +127,13 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self._retrievers = self._build_retrievers(self._retriever_specs)
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
-        logger.info("SAYT suggester initialized")
+        logger.info(
+            "SAYT suggester initialized",
+            corpus_size=self._corpus.size,
+            retriever_count=len(self._retrievers),
+            min_chars=self._min_chars,
+            max_suggestions=self._max_suggestions,
+        )
 
     @classmethod
     def _from_state(  # pylint: disable=too-many-arguments  # noqa: PLR0913
@@ -151,7 +158,6 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             tuple(stored_retrievers) if stored_retrievers is not None else None
         )
         suggester._artifact_provenance = artifact_provenance
-        logger.info("SAYT suggester initialized")
         return suggester
 
     @classmethod
@@ -240,7 +246,6 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         result = []
         for configured_retriever in self._retrievers:
             start_time = time.time()
-            print(f"Running {configured_retriever.retriever.__class__.__name__}...")
             result.append(
                 (
                     configured_retriever.weight,
@@ -251,8 +256,11 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 )
             )
             elapsed_time = time.time() - start_time
-            print(
-                f"  -> query time: {elapsed_time * 1000:.2f} milliseconds with {len(result)} results"
+            logger.debug(
+                "Retriever query time (mid level)",
+                retriever_name=configured_retriever.retriever.__class__.__name__,
+                query_time=elapsed_time * 1000,
+                num_results=len(result),
             )
 
         return result
@@ -309,7 +317,11 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             num_suggestions = self._max_suggestions
         results = self.suggest_with_scores(query, num_suggestions=num_suggestions)
         elapsed_time = time.time() - start_time
-        print(f"Suggest query time: {elapsed_time * 1000:.2f} milliseconds")
+        logger.debug(
+            "Suggest query time (top level)",
+            query_time=elapsed_time * 1000,
+            num_suggestions=num_suggestions,
+        )
 
         return [s.display_text for s in results]
 

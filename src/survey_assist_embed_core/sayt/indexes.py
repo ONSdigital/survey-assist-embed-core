@@ -17,8 +17,11 @@ from classifai.indexers import VectorStore, VectorStoreSearchInput
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
+from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
+
+logger = get_logger(__name__)
 
 
 def _silent_tqdm(iterable, **_kwargs):
@@ -176,8 +179,11 @@ class DenseVectorIndex:
         ]
 
         elapsed = time.time() - start_time
-        print(
-            f"  -> search done in {elapsed * 1000:.2f}ms  with {len(suggestions)} results {n_results}"
+        logger.debug(
+            "Dense index query time (low level)",
+            query_time=elapsed * 1000,
+            num_suggestions=num_suggestions,
+            n_results=n_results,
         )
 
         return take_with_ties(suggestions, limit=num_suggestions)
