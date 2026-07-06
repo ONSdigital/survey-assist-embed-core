@@ -17,23 +17,31 @@ Common embedding logic functionality used in Survey Assist vector stores.
 - [Local Development Setup](#local-development-setup)
 - [Running Locally](#running-locally)
 - [Configuration](#configuration)
+- [Repository Structure](#repository-structure)
 - [Testing](#testing)
 - [Code Quality](#code-quality)
 - [Security](#security)
 - [Documentation](#documentation)
-- [Release Process](#release-process)
-- [Repository Structure](#repository-structure)
 - [Contributing](#contributing)
-- [License](#license)
-- [Maintainers](#maintainers)
+- [Additional Documentation](#additional-documentation)
 
 ## Features
 
-**update when merged**
+- Build persisted vector-store artifacts from labelled CSV data.
+- Load existing local or GCS-backed vector stores through `EmbeddingHandler`.
+- Run single-query and multi-field retrieval against a loaded index.
+- Inspect runtime backend and index configuration through typed status models.
 
 ## Architecture
 
-**update or remove when merged**
+The package is structured around an explicit two-step workflow:
+
+1. Build persisted retrieval artifacts with `build_embedding_index`.
+2. Load those artifacts with `EmbeddingHandler` and perform searches.
+
+At runtime, `EmbeddingHandler` provides the public API for retrieval while the
+ClassifAI adapter handles vector-store creation and loading. Storage helpers
+resolve local filesystem paths and GCS-backed inputs.
 
 ## Prerequisites
 
@@ -72,28 +80,71 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
 ## Running Locally
 
-**update or remove when merged**
+The quickest way to exercise it locally is to run the demo script or use the
+package directly from a Python session.
 
-### Start Application
+### Run the Demo
 
-**update or remove when merged**
+```shell
+poetry run python demos/embedding_handler.py
+```
 
-### API Documentation
+The demo script creates a small temporary `label,text` CSV, builds persisted
+vector-store artifacts, loads them with `EmbeddingHandler`, and prints example
+search results.
 
-**update or remove when merged**
+If you prefer interactive execution in VS Code, open
+`demos/embedding_handler.py` and run the `# %%` cells one at a time.
+
+### Use the Library Directly
+
+```python
+from survey_assist_embed_core import EmbeddingHandler, build_embedding_index
+
+build_embedding_index(
+    index_source_file="my_knowledgebase.csv",
+    output_dir="vector_store",
+)
+
+handler = EmbeddingHandler(db_dir="vector_store")
+results = handler.search_index("primary education")
+```
 
 ## Configuration
 
-**update or remove when merged**
+The main entry points are:
+
+- `build_embedding_index(...)`: builds persisted vector-store artifacts from a
+  local CSV file or GCS URI.
+- `EmbeddingHandler(...)`: loads a persisted vector store from local storage or
+  GCS and exposes the retrieval methods.
+
+Key inputs:
+
+- `index_source_file`: CSV input containing `label,text` columns.
+- `output_dir`: directory where persisted artifacts such as `metadata.json`
+  and `vectors.parquet` are written.
+- `db_dir`: local path or `gs://...` URI for a persisted vector store.
+- `k_matches`: maximum number of results returned per search.
+- `embedding_model_name`: optional model override for the build step. The
+  default is `sentence-transformers/all-MiniLM-L6-v2`.
+
+For GCS-backed builds or loads, ensure Google Cloud credentials are available
+in the local environment before running the workflow.
 
 ## Repository Structure
 
-**Update as the repository evolves**
+An end-to-end cell-based demo is available at `demos/embedding_handler.py`.
 
 ```txt
 survey-assist-embed-core/
-|-- docs/                           # mkdocs documentation
-|-- src/                            # main source
+|-- demos/                          # cell-based usage demos (# %%)
+|-- docs/                           # MkDocs documentation
+|-- src/survey_assist_embed_core/   # main library package
+|   |-- adapters/                   # ClassifAI and storage adapters
+|   |-- embed/                      # EmbeddingHandler public retrieval API
+|   |-- models/                     # pydantic config and response models
+|   |-- ports/                      # backend protocols
 |-- tests/                          # pytest unit tests
 |-- .github/                        # GitHub actions workflows
 |-- README.md                       # This file

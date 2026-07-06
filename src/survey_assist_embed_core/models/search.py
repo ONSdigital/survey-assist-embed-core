@@ -4,7 +4,13 @@ from pydantic import BaseModel
 
 
 class SearchIndexItem(BaseModel):
-    """Represent one ranked vector-search result."""
+    """One ranked item returned from a vector search.
+
+    Attributes:
+        distance: Distance derived from the backend similarity score.
+        title: Human-readable title for the matched classification item.
+        code: Classification code associated with the title.
+    """
 
     distance: float
     title: str
@@ -12,6 +18,10 @@ class SearchIndexItem(BaseModel):
 
 
 class SearchIndexResponse(BaseModel):
-    """Represent a vector-search response payload."""
+    """Vector-search response payload.
+
+    Attributes:
+        results: Ranked search results in response order.
+    """
 
     results: list[SearchIndexItem]
