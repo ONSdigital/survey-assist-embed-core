@@ -3,7 +3,6 @@
 """Dense index construction helpers for SAYT retrievers."""
 
 import csv
-import logging
 import os
 import tempfile
 import time
@@ -18,10 +17,11 @@ from classifai.indexers import VectorStore, VectorStoreSearchInput
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
+from survey_assist_utils import get_logger
 
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _silent_tqdm(iterable, **_kwargs):
