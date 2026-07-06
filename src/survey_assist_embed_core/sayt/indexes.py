@@ -125,7 +125,7 @@ class DenseVectorIndex:
             _vector_store=vector_store,
             _num_vectors=int(vector_store.num_vectors or 0),
             _corpus=corpus,
-            _max_duplication=max(corpus.display_text_count.values(), default=1),
+            _max_duplication=max(corpus.display_text_value_counts.values(), default=1),
         )
 
     @classmethod
@@ -158,7 +158,7 @@ class DenseVectorIndex:
             _vector_store=vector_store,
             _num_vectors=int(vector_store.num_vectors or 0),
             _corpus=corpus,
-            _max_duplication=max(corpus.display_text_count.values(), default=1),
+            _max_duplication=max(corpus.display_text_value_counts.values(), default=1),
         )
 
     @staticmethod

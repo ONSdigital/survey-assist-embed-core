@@ -46,6 +46,25 @@ def test_clean_corpus_rows_are_search_display_pairs(small_corpus):
     assert all(len(row) == 2 for row in corpus.rows)
 
 
+def test_clean_corpus_rows_are_sorted_by_search_and_display():
+    """Sort cleaned rows by search text, then display text."""
+    corpus = CleanCorpus.model_validate(
+        [
+            ("Dog grooming", "Dog grooming"),
+            ("Car wash", "Car Wash"),
+            ("Car wash", "CAR WASH (duplicate)"),
+            ("Car waxing", "Car Waxing"),
+        ]
+    )
+
+    assert corpus.rows == [
+        ("car wash", "CAR WASH (duplicate)"),
+        ("car wash", "Car Wash"),
+        ("car waxing", "Car Waxing"),
+        ("dog grooming", "Dog grooming"),
+    ]
+
+
 def test_clean_corpus_accepts_existing_instance_and_dict_input(small_corpus):
     """Preserve existing validated input forms through pydantic coercion."""
     corpus = CleanCorpus.model_validate(small_corpus)
@@ -74,7 +93,7 @@ def test_clean_corpus_model_dump_excludes_derived_lookup_dicts(small_corpus):
 
     assert "id_to_search" not in dumped
     assert "id_to_display" not in dumped
-    assert "display_text_count" not in dumped
+    assert "display_text_value_counts" not in dumped
     assert dumped["rows"] == corpus.rows
 
 

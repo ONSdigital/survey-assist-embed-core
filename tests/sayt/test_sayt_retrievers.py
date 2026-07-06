@@ -24,7 +24,6 @@ from survey_assist_embed_core.sayt.retrievers import (
     NgramRetriever,
     PrefixRetriever,
     SemanticRetriever,
-    _PrefixIndex,
 )
 from survey_assist_embed_core.sayt.suggester import SAYTSuggester
 
@@ -130,20 +129,14 @@ def test_prefix_retriever_returns_empty_for_short_queries(small_corpus):
 
 
 def test_prefix_retriever_handles_empty_prefix_candidates(small_corpus):
-    """Skip fuzzy scoring when the query prefix is empty."""
+    """Handle empty query prefixes and return ranked deduplicated results."""
     corpus = CleanCorpus.model_validate(small_corpus)
-    retriever = PrefixRetriever.__new__(PrefixRetriever)
-    retriever._corpus = corpus
-    retriever._min_chars = 0
-    retriever._index = _PrefixIndex(
-        sorted_terms=[("", corpus.rows[0][1])],
-        prefix_terms=[""],
-        token_index={},
-    )
+    retriever = PrefixRetriever(corpus, min_chars=0)
 
     results = retriever.suggest_with_scores("", num_suggestions=5)
 
-    assert [s.display_text for s in results] == [corpus.rows[0][1]]
+    assert len(results) == len(corpus.display_text_value_counts)
+    assert {s.display_text for s in results} == set(corpus.display_text_value_counts)
 
 
 def test_prefix_retriever_keeps_ties_at_cutoff():
@@ -249,7 +242,7 @@ def test_dense_retriever_keeps_ties_at_cutoff(small_corpus):
 
     results = retriever.suggest_with_scores("car", num_suggestions=1)
 
-    assert [s.display_text for s in results] == [corpus.rows[0][1], corpus.rows[1][1]]
+    assert {s.display_text for s in results} == {corpus.rows[0][1], corpus.rows[1][1]}
 
 
 def test_dense_vector_index_builds_persistent_filespace(

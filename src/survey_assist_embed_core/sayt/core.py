@@ -33,7 +33,7 @@ class PersistedCorpusRow:
 
 
 class CleanCorpus(BaseModel):
-    """Store cleaned SAYT rows and their derived lookup tables.
+    """Store cleaned and sorted SAYT rows and their derived lookup tables.
 
     Instances are created from raw strings or ``(search_text, display_text)``
     pairs and expose display-level duplication counts used for ranking.
@@ -42,7 +42,7 @@ class CleanCorpus(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     rows: list[tuple[str, str]] = Field(default_factory=list)
     size: int = 0
-    _display_text_count: dict[str, int] = PrivateAttr(default_factory=dict)
+    _display_text_value_counts: dict[str, int] = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -62,22 +62,28 @@ class CleanCorpus(BaseModel):
         }
 
     @property
-    def display_text_count(self) -> dict[str, int]:
+    def display_text_value_counts(self) -> dict[str, int]:
         """Return per-display-text occurrence counts for the cleaned corpus."""
-        return self._display_text_count
+        return self._display_text_value_counts
 
     # Pylint does not understand Pydantic's model_post_init signature here.
     def model_post_init(  # pylint: disable=arguments-differ
         self, __context: Any
     ) -> None:
+        self._sort_rows()
         self._populate_indexes()
+
+    def _sort_rows(self) -> "CleanCorpus":
+        """Sort the cleaned rows by search text and display text."""
+        self.rows = sorted(self.rows)
+        return self
 
     def _populate_indexes(self) -> "CleanCorpus":
         """Rebuild lookup tables from the current cleaned rows."""
-        self._display_text_count = {}
+        self._display_text_value_counts = {}
         for _, display in self.rows:
-            self._display_text_count[display] = (
-                self._display_text_count.get(display, 0) + 1
+            self._display_text_value_counts[display] = (
+                self._display_text_value_counts.get(display, 0) + 1
             )
         self.size = len(self.rows)
         return self
@@ -248,48 +254,53 @@ class Suggestion:
 def take_with_ties(
     items: list[Suggestion],
     limit: int,
-    display_text_count: dict[str, int] | None = None,
+    display_text_value_counts: dict[str, int] | None = None,
 ) -> list[Suggestion]:
     """Return the first ``limit`` items and any later items tied on score.
+
+    The items are ranked based on the following factors (in order):
+        1. Descending score.
+        2. Descending display-text duplication count (when provided).
+        3. Case-insensitive display-text alphabetical order.
+    Duplicates with the same display text are removed, keeping the highest-scoring one.
 
     Args:
         items: Scored ``Suggestion`` objects to rank.
         limit: Maximum number of leading items before tie extension is applied.
-        display_text_count: Optional mapping of display text to occurrence counts
+        display_text_value_counts: Optional mapping of display text to occurrence counts
             in the corpus. If provided, items whose display text occurs more than
             once will be considered for higher priority.
 
     Returns:
         The highest-scoring items up to ``limit``, plus any later items that are
         tied with the cutoff score.
-
-    Ranking factors (in order):
-        1. Descending score.
-        2. Descending display-text duplication count (when provided).
-        3. Case-insensitive display-text alphabetical order.
-
-    This helper does not deduplicate by display text. It only ranks and preserves
-    ties at the score cutoff.
     """
     if limit < 1 or not items:
         return []
-    if display_text_count is None:
-        display_text_count = {}
+    if display_text_value_counts is None:
+        display_text_value_counts = {}
 
     items = sorted(
         items,
         key=lambda kv: (
             -kv.score,
-            -display_text_count.get(kv.display_text, 0),
+            -display_text_value_counts.get(kv.display_text, 0),
             kv.display_text.lower(),
         ),
     )
+    # drop duplicates with the same display text, keeping the highest-scoring one
+    seen_display_texts: set[str] = set()
+    deduped_items: list[Suggestion] = []
+    for item in items:
+        if item.display_text not in seen_display_texts:
+            deduped_items.append(item)
+            seen_display_texts.add(item.display_text)
 
-    if limit >= len(items):
-        return items
+    if limit >= len(deduped_items):
+        return deduped_items
 
-    cutoff_score = float(items[limit - 1].score)
+    cutoff_score = float(deduped_items[limit - 1].score)
     end = limit
-    while end < len(items) and float(items[end].score) == cutoff_score:
+    while end < len(deduped_items) and float(deduped_items[end].score) == cutoff_score:
         end += 1
-    return items[:end]
+    return deduped_items[:end]

@@ -20,9 +20,7 @@ _FUZZY_PREFIX_MIN_RATIO = 0.75
 class _PrefixIndex:
     """Precomputed prefix lookup structures for prefix matching."""
 
-    sorted_terms: list[tuple[str, str]]
-    prefix_terms: list[str]
-    token_index: dict[str, set[str]]
+    token_index: dict[str, set[int]]
 
 
 class PrefixRetriever:
@@ -35,30 +33,23 @@ class PrefixRetriever:
             corpus: Cleaned corpus to search.
             min_chars: Minimum query length required before retrieval runs.
         """
-        self._corpus = corpus
         self._min_chars = min_chars
-        self._index = self._build_index(corpus)
+        self.search_terms = [search_norm for search_norm, _ in corpus.rows]
+        self.display_terms = [display_text for _, display_text in corpus.rows]
+        self._index = self._build_index(self.search_terms)
 
     @staticmethod
-    def _build_index(corpus: CleanCorpus) -> _PrefixIndex:
-        """Precompute sorted prefix terms and token-prefix lookup tables."""
-        sorted_terms: list[tuple[str, str]] = []
-        token_index: dict[str, set[str]] = {}
+    def _build_index(search_terms: list[str]) -> _PrefixIndex:
+        """Precompute token-prefix lookup tables keyed by corpus row index."""
+        token_index: dict[str, set[int]] = {}
 
-        for search_norm, display in corpus.rows:
-            sorted_terms.append((search_norm, display))
-            for token in search_norm.split():
-                for i in range(1, min(len(token), len(search_norm)) + 1):
+        for row_ind, search_text in enumerate(search_terms):
+            for token in search_text.split():
+                for i in range(1, min(len(token), len(search_text)) + 1):
                     prefix_str = token[:i]
-                    token_index.setdefault(prefix_str, set()).add(display)
+                    token_index.setdefault(prefix_str, set()).add(row_ind)
 
-        sorted_terms.sort(key=lambda x: x[0])
-        prefix_terms = [s for s, _ in sorted_terms]
-        return _PrefixIndex(
-            sorted_terms=sorted_terms,
-            prefix_terms=prefix_terms,
-            token_index=token_index,
-        )
+        return _PrefixIndex(token_index=token_index)
 
     def suggest_with_scores(
         self, q_norm: str, num_suggestions: int
@@ -76,27 +67,34 @@ class PrefixRetriever:
         if len(q_norm) < self._min_chars:
             return []
 
-        scores: dict[str, float] = {}
+        scores = [0.0] * len(self.search_terms)
+        matched_inds: set[int] = set()
 
-        left = bisect_left(self._index.prefix_terms, q_norm)
-        right = bisect_right(self._index.prefix_terms, q_norm + "\uffff")
-        for _, row_id in self._index.sorted_terms[left:right]:
-            scores[row_id] = scores.get(row_id, 0.0) + 3.0
+        left = bisect_left(self.search_terms, q_norm)
+        right = bisect_right(self.search_terms, q_norm + "\uffff")
+        for row_ind in range(left, right):
+            scores[row_ind] += 3.0
+            matched_inds.add(row_ind)
 
-        for row_id in self._index.token_index.get(q_norm, set()):
-            scores[row_id] = scores.get(row_id, 0.0) + 2.5
+        for row_ind in self._index.token_index.get(q_norm, set()):
+            scores[row_ind] += 2.5
+            matched_inds.add(row_ind)
 
-        for search_norm, row_id in self._index.sorted_terms:
+        for row_ind, search_norm in enumerate(self.search_terms):
             prefix = search_norm[: len(q_norm)]
             if not prefix:
                 continue
             ratio = SequenceMatcher(a=q_norm, b=prefix).ratio()
             if ratio >= _FUZZY_PREFIX_MIN_RATIO:
-                scores[row_id] = scores.get(row_id, 0.0) + (2.4 * ratio)
+                scores[row_ind] += 2.4 * ratio
+                matched_inds.add(row_ind)
 
         suggestions = [
-            Suggestion(display_text=display, score=score)
-            for display, score in scores.items()
+            Suggestion(
+                display_text=self.display_terms[row_ind],
+                score=scores[row_ind],
+            )
+            for row_ind in matched_inds
         ]
         return take_with_ties(suggestions, limit=num_suggestions)
 

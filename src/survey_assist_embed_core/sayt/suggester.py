@@ -302,7 +302,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
               improve cross-retriever score pairing before final truncation.
             - Final ranking and cutoff tie handling are delegated to
               ``take_with_ties`` using corpus display-text duplication counts.
-            - Output is display-text deduplicated by ``_combine_suggestions``.
+            - Output is display-text deduplicated by ``take_with_ties``.
         """
         if num_suggestions is None:
             num_suggestions = self._max_suggestions
@@ -318,7 +318,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
 
         combined_result = self._combine_suggestions(results_by_kind)
         return take_with_ties(
-            combined_result, num_suggestions, self._corpus.display_text_count
+            combined_result, num_suggestions, self._corpus.display_text_value_counts
         )
 
     def suggest(
@@ -385,9 +385,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             ),
             corpus=SaytCorpusSummary(
                 size=self._corpus.size,
-                unique_display_texts=len(self._corpus.display_text_count),
+                unique_display_texts=len(self._corpus.display_text_value_counts),
                 max_duplication=max(
-                    self._corpus.display_text_count.values(), default=0
+                    self._corpus.display_text_value_counts.values(), default=0
                 ),
             ),
             retrievers=retrievers,
