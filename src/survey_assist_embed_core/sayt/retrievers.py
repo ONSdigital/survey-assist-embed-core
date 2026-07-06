@@ -2,9 +2,9 @@
 
 # pylint: disable=too-few-public-methods, R0801
 
-from bisect import bisect_left, bisect_right
-from dataclasses import dataclass
-from difflib import SequenceMatcher
+from dataclasses import dataclass, field
+
+from rapidfuzz import fuzz
 
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 from survey_assist_embed_core.sayt.indexes import (
@@ -16,11 +16,40 @@ from survey_assist_embed_core.sayt.indexes import (
 _FUZZY_PREFIX_MIN_RATIO = 0.75
 
 
+@dataclass(slots=True)
+class _PrefixTrieNode:
+    """Trie node storing child links and matching row indices for a prefix."""
+
+    children: dict[str, "_PrefixTrieNode"] = field(default_factory=dict)
+    row_inds: set[int] = field(default_factory=set)
+
+
+def _insert_prefix(root: _PrefixTrieNode, text: str, row_ind: int) -> None:
+    """Insert all prefixes of ``text`` into ``root`` for ``row_ind``."""
+    node = root
+    for char in text:
+        node = node.children.setdefault(char, _PrefixTrieNode())
+        node.row_inds.add(row_ind)
+
+
+def _lookup_prefix(root: _PrefixTrieNode, prefix: str) -> set[int]:
+    """Return row indices that match ``prefix`` within the trie."""
+    node: _PrefixTrieNode | None = root
+    for char in prefix:
+        if node is None:
+            return set()
+        node = node.children.get(char)
+    if node is None:
+        return set()
+    return node.row_inds
+
+
 @dataclass(frozen=True, slots=True)
 class _PrefixIndex:
     """Precomputed prefix lookup structures for prefix matching."""
 
-    token_index: dict[str, set[int]]
+    search_trie: _PrefixTrieNode
+    token_trie: _PrefixTrieNode
 
 
 class PrefixRetriever:
@@ -40,16 +69,16 @@ class PrefixRetriever:
 
     @staticmethod
     def _build_index(search_terms: list[str]) -> _PrefixIndex:
-        """Precompute token-prefix lookup tables keyed by corpus row index."""
-        token_index: dict[str, set[int]] = {}
+        """Precompute search-prefix and token-prefix tries keyed by row index."""
+        search_trie = _PrefixTrieNode()
+        token_trie = _PrefixTrieNode()
 
         for row_ind, search_text in enumerate(search_terms):
+            _insert_prefix(search_trie, search_text, row_ind)
             for token in search_text.split():
-                for i in range(1, min(len(token), len(search_text)) + 1):
-                    prefix_str = token[:i]
-                    token_index.setdefault(prefix_str, set()).add(row_ind)
+                _insert_prefix(token_trie, token, row_ind)
 
-        return _PrefixIndex(token_index=token_index)
+        return _PrefixIndex(search_trie=search_trie, token_trie=token_trie)
 
     def suggest_with_scores(
         self, q_norm: str, num_suggestions: int
@@ -70,13 +99,11 @@ class PrefixRetriever:
         scores = [0.0] * len(self.search_terms)
         matched_inds: set[int] = set()
 
-        left = bisect_left(self.search_terms, q_norm)
-        right = bisect_right(self.search_terms, q_norm + "\uffff")
-        for row_ind in range(left, right):
+        for row_ind in _lookup_prefix(self._index.search_trie, q_norm):
             scores[row_ind] += 3.0
             matched_inds.add(row_ind)
 
-        for row_ind in self._index.token_index.get(q_norm, set()):
+        for row_ind in _lookup_prefix(self._index.token_trie, q_norm):
             scores[row_ind] += 2.5
             matched_inds.add(row_ind)
 
@@ -84,7 +111,7 @@ class PrefixRetriever:
             prefix = search_norm[: len(q_norm)]
             if not prefix:
                 continue
-            ratio = SequenceMatcher(a=q_norm, b=prefix).ratio()
+            ratio = fuzz.ratio(q_norm, prefix) / 100.0
             if ratio >= _FUZZY_PREFIX_MIN_RATIO:
                 scores[row_ind] += 2.4 * ratio
                 matched_inds.add(row_ind)

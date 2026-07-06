@@ -129,14 +129,13 @@ def test_prefix_retriever_returns_empty_for_short_queries(small_corpus):
 
 
 def test_prefix_retriever_handles_empty_prefix_candidates(small_corpus):
-    """Handle empty query prefixes and return ranked deduplicated results."""
+    """Return no prefix suggestions when the query is empty."""
     corpus = CleanCorpus.model_validate(small_corpus)
     retriever = PrefixRetriever(corpus, min_chars=0)
 
     results = retriever.suggest_with_scores("", num_suggestions=5)
 
-    assert len(results) == len(corpus.display_text_value_counts)
-    assert {s.display_text for s in results} == set(corpus.display_text_value_counts)
+    assert results == []
 
 
 def test_prefix_retriever_keeps_ties_at_cutoff():
