@@ -7,8 +7,6 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from survey_assist_utils.logging import get_logger
-
 from survey_assist_embed_core.sayt import (
     NgramRetrieverSpec,
     PrefixRetrieverSpec,
@@ -17,8 +15,6 @@ from survey_assist_embed_core.sayt import (
     SAYTSuggester,
     SemanticRetrieverSpec,
 )
-
-logger = get_logger(__name__)
 
 # %%
 ############# toy example to verify SAYT artifact build/load works #############
