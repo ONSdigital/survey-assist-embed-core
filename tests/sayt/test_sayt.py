@@ -79,7 +79,7 @@ def test_clean_corpus_model_dump_excludes_derived_lookup_dicts(small_corpus):
 
 
 def test_clean_corpus_restores_persisted_rows(small_corpus):
-    """Restore cleaned corpus rows without regenerating row identifiers."""
+    """Restore cleaned corpus rows exactly as persisted search/display pairs."""
     corpus = CleanCorpus.model_validate(small_corpus)
 
     restored = CleanCorpus.from_persisted_rows(

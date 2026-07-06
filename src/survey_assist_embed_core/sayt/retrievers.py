@@ -71,7 +71,7 @@ class PrefixRetriever:
                 tie expansion.
 
         Returns:
-            Ranked ``(display_text, score)`` pairs scored by prefix heuristics.
+            Ranked ``Suggestion`` objects scored by prefix heuristics.
         """
         if len(q_norm) < self._min_chars:
             return []

@@ -43,13 +43,27 @@ def _silence_classifai_tqdm():
 def _derive_num_retrieved_based_on_duplication(
     n_suggestions: int, max_duplication: int, corpus_size: int
 ) -> int:
-    """Return the maximum number of times a display text can appear in the corpus."""
+    """Derive dense retrieval number of candidates from requested size and corpus duplication.
+
+    The number of candidates is intentionally dampened using ``log2(max_duplication) + 1``
+    rather than scaling linearly with ``max_duplication``. This keeps candidate
+    growth sub-linear when many rows share the same display text, balancing
+    recall against dense query cost.
+
+    Args:
+        n_suggestions: Requested number of final suggestions.
+        max_duplication: Maximum count of any display text in the corpus.
+        corpus_size: Total number of indexed rows.
+
+    Returns:
+        Candidate count for vector-store search, capped at corpus size.
+    """
     if n_suggestions < 1 or corpus_size < 1:
         return 0
 
-    dumpen_max_duplication = int(np.log2(max(max_duplication, 1)) + 1)
+    dampen_max_duplication = int(np.log2(max(max_duplication, 1)) + 1)
 
-    out = min(corpus_size, n_suggestions * dumpen_max_duplication)
+    out = min(corpus_size, n_suggestions * dampen_max_duplication)
     return out
 
 
@@ -152,7 +166,7 @@ class DenseVectorIndex:
         corpus: CleanCorpus,
         csv_path: str | os.PathLike[str],
     ) -> None:
-        """Write the row-id and search-text schema expected by ClassifAI."""
+        """Write the display-label and search-text schema expected by ClassifAI."""
         csv_file = Path(csv_path)
         csv_file.parent.mkdir(parents=True, exist_ok=True)
         with open(csv_file, "w", newline="", encoding="utf-8") as csvfile:
@@ -168,11 +182,17 @@ class DenseVectorIndex:
 
         Args:
             q_norm: Normalised query text.
-            num_suggestions: Maximum number of scored row ids to return before
+            num_suggestions: Maximum number of scored suggestions to return before
                 tie expansion.
 
         Returns:
-            Ranked ``(row_id, score)`` pairs from the dense vector store.
+            Ranked ``Suggestion`` objects from the dense vector store.
+
+        Notes:
+            - Dense retrieval first fetches more than ``num_suggestions`` using
+              ``_derive_num_retrieved_based_on_duplication``.
+            - The widened candidate list is then ranked and trimmed with
+              ``take_with_ties`` to preserve cutoff ties.
         """
         if self._num_vectors < 1 or num_suggestions < 1:
             return []

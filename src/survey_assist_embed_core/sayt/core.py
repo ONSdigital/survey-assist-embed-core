@@ -36,7 +36,7 @@ class CleanCorpus(BaseModel):
     """Store cleaned SAYT rows and their derived lookup tables.
 
     Instances are created from raw strings or ``(search_text, display_text)``
-    pairs and retain stable row identifiers for downstream score aggregation.
+    pairs and expose display-level duplication counts used for ranking.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -262,6 +262,14 @@ def take_with_ties(
     Returns:
         The highest-scoring items up to ``limit``, plus any later items that are
         tied with the cutoff score.
+
+    Ranking factors (in order):
+        1. Descending score.
+        2. Descending display-text duplication count (when provided).
+        3. Case-insensitive display-text alphabetical order.
+
+    This helper does not deduplicate by display text. It only ranks and preserves
+    ties at the score cutoff.
     """
     if limit < 1 or not items:
         return []

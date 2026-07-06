@@ -37,7 +37,7 @@ class Retriever(Protocol):
             num_suggestions: Maximum number of scored results to return.
 
         Returns:
-            ``(row_id, score)`` pairs ranked by descending score.
+            Ranked ``Suggestion`` objects containing display text and score.
         """
 
 

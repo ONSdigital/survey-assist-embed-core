@@ -332,7 +332,7 @@ def test_dense_vector_index_query_scales_n_results_by_max_duplication(small_corp
 
     index.query("car", num_suggestions=5)
 
-    assert stub_store.calls[0][1] == 15  # 5 * 3
+    assert stub_store.calls[0][1] == 10  # 5 * 2
 
 
 def test_dense_vector_index_loads_existing_filespace(

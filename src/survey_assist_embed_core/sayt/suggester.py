@@ -217,6 +217,22 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self,
         result_groups: Iterable[tuple[float, list[Suggestion]]],
     ) -> list[Suggestion]:
+        """Combine retriever-local scores into a shared display-text score.
+
+        Combination factors:
+            - Within each retriever, scores are max-normalised by that retriever's
+              top score.
+            - The normalised score is multiplied by the retriever's configured
+              weight.
+            - For repeated display text in one retriever, the best weighted score
+              is kept.
+            - Across retrievers, weighted scores for the same display text are
+              summed.
+
+        Aggregation keys are display-text based, so duplicate display values are
+        collapsed at this stage.
+        """
+
         def normalise_scores(
             items: list[Suggestion], weight: float
         ) -> dict[str, float]:
@@ -280,6 +296,13 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             A list of combined suggestions ordered by descending score. Returns
             an empty list when the normalised query is shorter than
             ``min_chars``.
+
+        Notes:
+            - Each retriever is asked for ``num_suggestions * 5`` candidates to
+              improve cross-retriever score pairing before final truncation.
+            - Final ranking and cutoff tie handling are delegated to
+              ``take_with_ties`` using corpus display-text duplication counts.
+            - Output is display-text deduplicated by ``_combine_suggestions``.
         """
         if num_suggestions is None:
             num_suggestions = self._max_suggestions
@@ -301,7 +324,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
     def suggest(
         self, query: str | None, num_suggestions: int | None = None
     ) -> list[str]:
-        """Return deduplicated display-text suggestions.
+        """Return display-text-deduplicated suggestions.
 
         Args:
             query: Raw user query text.
