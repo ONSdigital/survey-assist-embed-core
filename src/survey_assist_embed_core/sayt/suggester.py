@@ -4,6 +4,7 @@ This module provides the public suggester API that coordinates configured
 retrievers and combines their scores into ranked suggestions.
 """
 
+import logging
 import math
 import os
 import time
@@ -11,8 +12,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
-
-from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.sayt._base import BaseCorpusBound
 from survey_assist_embed_core.sayt.core import (
@@ -37,7 +36,7 @@ from survey_assist_embed_core.sayt.storage import (
     read_artifact_manifest,
 )
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
