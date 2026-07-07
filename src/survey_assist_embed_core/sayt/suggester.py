@@ -275,7 +275,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             logger.debug(
                 "Retriever query time (mid level)",
                 retriever_name=configured_retriever.retriever.__class__.__name__,
-                query_time=elapsed_time * 1000,
+                query_time_ms=elapsed_time * 1000,
                 num_suggestions_requested=num_suggestions,
                 num_suggestions_returned=len(result[-1][1]),
             )
@@ -343,7 +343,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         elapsed_time = time.time() - start_time
         logger.debug(
             "Suggest query time (top level)",
-            query_time=elapsed_time * 1000,
+            query_time_ms=elapsed_time * 1000,
             num_suggestions_requested=num_suggestions,
             num_suggestions_returned=len(results),
         )

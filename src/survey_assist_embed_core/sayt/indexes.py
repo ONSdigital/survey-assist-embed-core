@@ -193,34 +193,46 @@ class DenseVectorIndex:
               ``_derive_num_retrieved_based_on_duplication``.
             - The widened candidate list is then ranked and trimmed with
               ``take_with_ties`` to preserve cutoff ties.
+            - If the widened candidate list is still too small to satisfy ``num_suggestions``,
+              the retrieval is repeated with a larger candidate count until either
+              the corpus is exhausted or enough candidates are found.
         """
         if self._num_vectors < 1 or num_suggestions < 1:
             return []
 
         start_time = time.time()
 
+        search_input = VectorStoreSearchInput({"id": ["q1"], "query": [q_norm]})
         num_results = _derive_num_retrieved_based_on_duplication(
             num_suggestions, self._max_duplication, self._num_vectors
         )
-        search_input = VectorStoreSearchInput({"id": ["q1"], "query": [q_norm]})
-        with _silence_classifai_tqdm():
-            results = self._vector_store.search(search_input, n_results=num_results)
 
-        labels = results["doc_label"].tolist()
-        scores = results["score"].tolist()
-        suggestions = [
-            Suggestion(display_text=label, score=score)
-            for label, score in zip(labels, scores, strict=True)
-        ]
-        out = take_with_ties(suggestions, limit=num_suggestions)
-        elapsed_time = time.time() - start_time
-        logger.debug(
-            "Dense index query time (low level)",
-            query_time=elapsed_time * 1000,
-            num_suggestions_requested=num_results,
-            num_suggestions_returned=len(suggestions),
-        )
-        return out
+        while True:
+            with _silence_classifai_tqdm():
+                results = self._vector_store.search(search_input, n_results=num_results)
+
+            labels = results["doc_label"].tolist()
+            scores = results["score"].tolist()
+            suggestions = [
+                Suggestion(display_text=label, score=score)
+                for label, score in zip(labels, scores, strict=True)
+            ]
+            out = take_with_ties(suggestions, limit=num_suggestions)
+
+            elapsed_time = time.time() - start_time
+            logger.debug(
+                "Dense index query time (low level)",
+                query_time_ms=elapsed_time * 1000,
+                num_sem_results_requested=num_results,
+                num_sem_results_returned=len(suggestions),
+                num_suggestions_requested=num_suggestions,
+                num_suggestions_returned=len(out),
+            )
+
+            if len(out) < num_suggestions and num_results < self._num_vectors:
+                num_results = min(self._num_vectors, num_results * 2)
+            else:
+                return out
 
 
 class _L2NormalisingVectoriser(VectoriserBase):
