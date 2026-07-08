@@ -15,6 +15,7 @@ import classifai.indexers.main as classifai_indexers_main
 import numpy as np
 from classifai.indexers import VectorStore, VectorStoreSearchInput
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
+from light_embed import TextEmbedding
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 from survey_assist_utils import get_logger
@@ -22,6 +23,8 @@ from survey_assist_utils import get_logger
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
 logger = get_logger(__name__)
+
+USE_ONNX = False  # Use ONNX backend for sentence-transformer embeddings
 
 
 def _silent_tqdm(iterable, **_kwargs):
@@ -235,6 +238,12 @@ class DenseVectorIndex:
                 return out
 
 
+def _normalise(vectors: np.ndarray) -> np.ndarray:
+    """L2-normalise a 2D array of vectors."""
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    return vectors / np.clip(norms, 1e-12, None)
+
+
 class _L2NormalisingVectoriser(VectoriserBase):
     """Wraps a classifai vectoriser and L2-normalises its outputs."""
 
@@ -248,8 +257,41 @@ class _L2NormalisingVectoriser(VectoriserBase):
         vectors = np.asarray(vectors, dtype=float)
         if vectors.ndim == 1:
             vectors = vectors.reshape(1, -1)
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        return vectors / np.clip(norms, 1e-12, None)
+
+        vectors = _normalise(vectors)
+        return vectors
+
+
+def _resolve_sentence_transformer_model(model: str) -> str:
+    return model if "/" in model else f"sentence-transformers/{model}"
+
+
+class _OnnxVectoriser(VectoriserBase):
+    """Sentence embedding vectoriser using light_embed with ONNX backend.
+
+    Supports both HuggingFace model names and local paths. The model is cached
+    at module level so initialization only happens once per process.
+    Outputs are L2-normalised.
+    """
+
+    def __init__(self, model: str) -> None:
+        """Load or retrieve cached TextEmbedding model."""
+        resolved_name = _resolve_sentence_transformer_model(model)
+
+        self.model = TextEmbedding(model_name_or_path=resolved_name)
+        self.model_name = resolved_name
+
+    def transform(self, texts: list[str] | str) -> np.ndarray:
+        """Encode texts and return L2-normalised embeddings."""
+        if isinstance(texts, str):
+            texts = [texts]
+
+        vectors = np.asarray(list(self.model.encode(texts)), dtype=np.float32)
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+
+        vectors = _normalise(vectors)
+        return vectors
 
 
 class _CharNgramVectoriser(VectoriserBase):
@@ -270,8 +312,9 @@ class _CharNgramVectoriser(VectoriserBase):
             texts = [texts]
         matrix = cast(csr_matrix, self._vectoriser.transform(texts))
         vectors = matrix.toarray().astype(float, copy=False)
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        return vectors / np.clip(norms, 1e-12, None)
+
+        vectors = _normalise(vectors)
+        return vectors
 
 
 def build_ngram_index(
@@ -347,10 +390,13 @@ def build_semantic_index(
     Returns:
         A dense index using semantic embeddings.
     """
-    base_vectoriser: VectoriserBase = HuggingFaceVectoriser(
-        f"sentence-transformers/{model}"
+    semantic_model = _resolve_sentence_transformer_model(model)
+    semantic_vectoriser = (
+        _OnnxVectoriser(semantic_model)
+        if USE_ONNX
+        else _L2NormalisingVectoriser(HuggingFaceVectoriser(semantic_model))
     )
-    semantic_vectoriser: VectoriserBase = _L2NormalisingVectoriser(base_vectoriser)
+
     return DenseVectorIndex.from_corpus(
         corpus=corpus,
         vectoriser=semantic_vectoriser,
@@ -366,10 +412,13 @@ def load_semantic_index(
     folder_path: str | os.PathLike[str],
 ) -> DenseVectorIndex:
     """Load a persisted dense index backed by semantic embeddings."""
-    base_vectoriser: VectoriserBase = HuggingFaceVectoriser(
-        f"sentence-transformers/{model}"
+    semantic_model = _resolve_sentence_transformer_model(model)
+    semantic_vectoriser = (
+        _OnnxVectoriser(semantic_model)
+        if USE_ONNX
+        else _L2NormalisingVectoriser(HuggingFaceVectoriser(semantic_model))
     )
-    semantic_vectoriser: VectoriserBase = _L2NormalisingVectoriser(base_vectoriser)
+
     return DenseVectorIndex.from_filespace(
         corpus=corpus,
         folder_path=folder_path,
