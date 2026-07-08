@@ -1,6 +1,6 @@
 [project]
 name = "survey-assist-embed-core"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = [{ name = "Steve Gibbard", email = "steve.gibbard@ons.gov.uk" }]
 readme = "README.md"
