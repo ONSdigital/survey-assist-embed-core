@@ -5,12 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-07-08
+
+### Added
+
+- Migrated embedding functionality from sic-classification-utils into this package.
+- Added structured logging support from survey-assist-utils.
+- Migrated search-as-you-type (SAYT) functionality from sic-classification-utils.
 
 ### Changed
 
-- Merge of sic-classification-utils embedding functionality to the repo and deprecation of original code
-- Merge of soc-classification-utils embedding functionality to the repo and deprecation of original code
+- Added artefact persistence logic to the VectorBackend contract.
+- Updated docstrings and demos.
+- Applied SAYT tweaks needed for the 100examples evaluation.
 
 ## [0.1.0] - 2026-06-17
 
@@ -21,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflow for linting, Bandit security checks and unit tests.
 
 ## Placeholder
+
 This section is kept to have easy access to the types change to capture.
 
 ### Added
