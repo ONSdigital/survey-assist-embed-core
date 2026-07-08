@@ -2,9 +2,9 @@
 
 # pylint: disable=too-few-public-methods, R0801
 
-from bisect import bisect_left, bisect_right
-from dataclasses import dataclass
-from difflib import SequenceMatcher
+from dataclasses import dataclass, field
+
+from rapidfuzz import fuzz
 
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 from survey_assist_embed_core.sayt.indexes import (
@@ -16,13 +16,40 @@ from survey_assist_embed_core.sayt.indexes import (
 _FUZZY_PREFIX_MIN_RATIO = 0.75
 
 
+@dataclass(slots=True)
+class _PrefixTrieNode:
+    """Trie node storing child links and matching row indices for a prefix."""
+
+    children: dict[str, "_PrefixTrieNode"] = field(default_factory=dict)
+    row_inds: set[int] = field(default_factory=set)
+
+
+def _insert_prefix(root: _PrefixTrieNode, text: str, row_ind: int) -> None:
+    """Insert all prefixes of ``text`` into ``root`` for ``row_ind``."""
+    node = root
+    for char in text:
+        node = node.children.setdefault(char, _PrefixTrieNode())
+        node.row_inds.add(row_ind)
+
+
+def _lookup_prefix(root: _PrefixTrieNode, prefix: str) -> set[int]:
+    """Return row indices that match ``prefix`` within the trie."""
+    node: _PrefixTrieNode | None = root
+    for char in prefix:
+        if node is None:
+            return set()
+        node = node.children.get(char)
+    if node is None:
+        return set()
+    return node.row_inds
+
+
 @dataclass(frozen=True, slots=True)
 class _PrefixIndex:
     """Precomputed prefix lookup structures for prefix matching."""
 
-    sorted_terms: list[tuple[str, str]]
-    prefix_terms: list[str]
-    token_index: dict[str, set[str]]
+    search_trie: _PrefixTrieNode
+    token_trie: _PrefixTrieNode
 
 
 class PrefixRetriever:
@@ -35,30 +62,23 @@ class PrefixRetriever:
             corpus: Cleaned corpus to search.
             min_chars: Minimum query length required before retrieval runs.
         """
-        self._corpus = corpus
         self._min_chars = min_chars
-        self._index = self._build_index(corpus)
+        self.search_terms = [search_norm for search_norm, _ in corpus.rows]
+        self.display_terms = [display_text for _, display_text in corpus.rows]
+        self._index = self._build_index(self.search_terms)
 
     @staticmethod
-    def _build_index(corpus: CleanCorpus) -> _PrefixIndex:
-        """Precompute sorted prefix terms and token-prefix lookup tables."""
-        sorted_terms: list[tuple[str, str]] = []
-        token_index: dict[str, set[str]] = {}
+    def _build_index(search_terms: list[str]) -> _PrefixIndex:
+        """Precompute search-prefix and token-prefix tries keyed by row index."""
+        search_trie = _PrefixTrieNode()
+        token_trie = _PrefixTrieNode()
 
-        for row_id, search_norm, _ in corpus.rows:
-            sorted_terms.append((search_norm, row_id))
-            for token in search_norm.split():
-                for i in range(1, min(len(token), len(search_norm)) + 1):
-                    prefix_str = token[:i]
-                    token_index.setdefault(prefix_str, set()).add(row_id)
+        for row_ind, search_text in enumerate(search_terms):
+            _insert_prefix(search_trie, search_text, row_ind)
+            for token in search_text.split():
+                _insert_prefix(token_trie, token, row_ind)
 
-        sorted_terms.sort(key=lambda x: x[0])
-        prefix_terms = [s for s, _ in sorted_terms]
-        return _PrefixIndex(
-            sorted_terms=sorted_terms,
-            prefix_terms=prefix_terms,
-            token_index=token_index,
-        )
+        return _PrefixIndex(search_trie=search_trie, token_trie=token_trie)
 
     def suggest_with_scores(
         self, q_norm: str, num_suggestions: int
@@ -67,8 +87,8 @@ class PrefixRetriever:
 
         Args:
             q_norm: Normalised query text.
-            num_suggestions: Maximum number of scored suggestions to return
-                before tie expansion.
+            num_suggestions: Maximum number of scored results to return before
+                tie expansion.
 
         Returns:
             Ranked ``Suggestion`` objects scored by prefix heuristics.
@@ -76,34 +96,34 @@ class PrefixRetriever:
         if len(q_norm) < self._min_chars:
             return []
 
-        scores: dict[str, float] = {}
+        scores = [0.0] * len(self.search_terms)
+        matched_inds: set[int] = set()
 
-        left = bisect_left(self._index.prefix_terms, q_norm)
-        right = bisect_right(self._index.prefix_terms, q_norm + "\uffff")
-        for _, row_id in self._index.sorted_terms[left:right]:
-            scores[row_id] = scores.get(row_id, 0.0) + 3.0
+        for row_ind in _lookup_prefix(self._index.search_trie, q_norm):
+            scores[row_ind] += 3.0
+            matched_inds.add(row_ind)
 
-        for row_id in self._index.token_index.get(q_norm, set()):
-            scores[row_id] = scores.get(row_id, 0.0) + 2.5
+        for row_ind in _lookup_prefix(self._index.token_trie, q_norm):
+            scores[row_ind] += 2.5
+            matched_inds.add(row_ind)
 
-        for search_norm, row_id in self._index.sorted_terms:
+        for row_ind, search_norm in enumerate(self.search_terms):
             prefix = search_norm[: len(q_norm)]
             if not prefix:
                 continue
-            ratio = SequenceMatcher(a=q_norm, b=prefix).ratio()
+            ratio = fuzz.ratio(q_norm, prefix) / 100.0
             if ratio >= _FUZZY_PREFIX_MIN_RATIO:
-                scores[row_id] = scores.get(row_id, 0.0) + (2.4 * ratio)
+                scores[row_ind] += 2.4 * ratio
+                matched_inds.add(row_ind)
 
-        ranked = take_with_ties(list(scores.items()), limit=num_suggestions)
-        return [
+        suggestions = [
             Suggestion(
-                display_text=self._corpus.id_to_display.get(row_id, ""),
-                score=float(score),
-                search_text=self._corpus.id_to_search.get(row_id, ""),
-                row_id=row_id,
+                display_text=self.display_terms[row_ind],
+                score=scores[row_ind],
             )
-            for row_id, score in ranked
+            for row_ind in matched_inds
         ]
+        return take_with_ties(suggestions, limit=num_suggestions)
 
 
 class _DenseRetriever:
@@ -131,18 +151,10 @@ class _DenseRetriever:
     def suggest_with_scores(
         self, q_norm: str, num_suggestions: int
     ) -> list[Suggestion]:
-        """Return dense-vector matches after applying retriever-level gating."""
+        """Return dense-vector suggestions after applying retriever-level gating."""
         if len(q_norm) < self._min_chars:
             return []
-        return [
-            Suggestion(
-                display_text=self._corpus.id_to_display.get(row_id, ""),
-                score=score,
-                search_text=self._corpus.id_to_search.get(row_id, ""),
-                row_id=row_id,
-            )
-            for row_id, score in self._index.query(q_norm, num_suggestions)
-        ]
+        return self._index.query(q_norm, num_suggestions)
 
 
 class NgramRetriever(_DenseRetriever):

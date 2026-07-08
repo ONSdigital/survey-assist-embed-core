@@ -24,7 +24,6 @@ from survey_assist_embed_core.sayt.retrievers import (
     NgramRetriever,
     PrefixRetriever,
     SemanticRetriever,
-    _PrefixIndex,
 )
 from survey_assist_embed_core.sayt.suggester import SAYTSuggester
 
@@ -102,6 +101,9 @@ class _StubSearchResults:
     def __init__(self, rows):
         self._rows = rows
 
+    def __getitem__(self, column):
+        return np.array([row[column] for row in self._rows])
+
     def to_dict(self, orient="dict"):
         assert orient == "records"
         return self._rows
@@ -121,29 +123,19 @@ def test_prefix_retriever_returns_empty_for_short_queries(small_corpus):
     """Skip prefix work when the query is shorter than the minimum."""
     corpus = CleanCorpus.model_validate(small_corpus)
 
-    assert (
-        PrefixRetriever(corpus, min_chars=4).suggest_with_scores(
-            "car", num_suggestions=5
-        )
-        == []
+    assert not PrefixRetriever(corpus, min_chars=4).suggest_with_scores(
+        "car", num_suggestions=5
     )
 
 
 def test_prefix_retriever_handles_empty_prefix_candidates(small_corpus):
-    """Skip fuzzy scoring when the query prefix is empty."""
+    """Return no prefix suggestions when the query is empty."""
     corpus = CleanCorpus.model_validate(small_corpus)
-    retriever = PrefixRetriever.__new__(PrefixRetriever)
-    retriever._corpus = corpus
-    retriever._min_chars = 0
-    retriever._index = _PrefixIndex(
-        sorted_terms=[("", corpus.rows[0][0])],
-        prefix_terms=[""],
-        token_index={},
-    )
+    retriever = PrefixRetriever(corpus, min_chars=0)
 
     results = retriever.suggest_with_scores("", num_suggestions=5)
 
-    assert [result.display_text for result in results] == [corpus.rows[0][2]]
+    assert results == []
 
 
 def test_prefix_retriever_keeps_ties_at_cutoff():
@@ -156,7 +148,7 @@ def test_prefix_retriever_keeps_ties_at_cutoff():
         "car", num_suggestions=1
     )
 
-    assert [result.display_text for result in results] == ["Car Wash", "Car Waxing"]
+    assert [s.display_text for s in results] == ["Car Wash", "Car Waxing"]
 
 
 def test_l2_normalising_vectoriser_handles_one_dimensional_output():
@@ -238,9 +230,9 @@ def test_dense_retriever_keeps_ties_at_cutoff(small_corpus):
     retriever._index = DenseVectorIndex(
         _vector_store=_StubVectorStore(
             [
-                {"doc_label": corpus.rows[0][0], "score": 0.9},
-                {"doc_label": corpus.rows[1][0], "score": 0.9},
-                {"doc_label": corpus.rows[2][0], "score": 0.2},
+                {"doc_label": corpus.rows[0][1], "score": 0.9},
+                {"doc_label": corpus.rows[1][1], "score": 0.9},
+                {"doc_label": corpus.rows[2][1], "score": 0.2},
             ]
         ),
         _num_vectors=3,
@@ -249,10 +241,7 @@ def test_dense_retriever_keeps_ties_at_cutoff(small_corpus):
 
     results = retriever.suggest_with_scores("car", num_suggestions=1)
 
-    assert [result.row_id for result in results] == [
-        corpus.rows[0][0],
-        corpus.rows[1][0],
-    ]
+    assert {s.display_text for s in results} == {corpus.rows[0][1], corpus.rows[1][1]}
 
 
 def test_dense_vector_index_builds_persistent_filespace(
@@ -307,6 +296,7 @@ def test_dense_vector_index_builds_persistent_filespace(
     )
 
     assert index._num_vectors == len(corpus.rows)
+    assert index._max_duplication == 2  # "Car Waxing" appears twice in small_corpus
     assert Path(captured["file_name"]).name == "corpus.csv"
     assert Path(captured["file_name"]).parent != output_dir
     assert captured["data_type"] == "csv"
@@ -316,8 +306,25 @@ def test_dense_vector_index_builds_persistent_filespace(
     assert captured["overwrite"] is True
     assert captured["hooks"] is None
     assert captured["rows"] == [
-        {"label": row_id, "text": search_text} for row_id, search_text, _ in corpus.rows
+        {"label": display_text, "text": search_text}
+        for search_text, display_text in corpus.rows
     ]
+
+
+def test_dense_vector_index_query_scales_n_results_by_max_duplication(small_corpus):
+    """Fetch num_suggestions * _max_duplication candidates from the vector store."""
+    corpus = CleanCorpus.model_validate(small_corpus)
+    stub_store = _StubVectorStore([])
+    index = DenseVectorIndex(
+        _vector_store=stub_store,
+        _num_vectors=100,
+        _corpus=corpus,
+        _max_duplication=3,
+    )
+
+    index.query("car", num_suggestions=5)
+
+    assert stub_store.calls[0][1] == 10  # 5 * 2
 
 
 def test_dense_vector_index_loads_existing_filespace(
@@ -349,6 +356,7 @@ def test_dense_vector_index_loads_existing_filespace(
     )
 
     assert index._num_vectors == 7
+    assert index._max_duplication == 2  # "Car Waxing" appears twice in small_corpus
     assert index._corpus is corpus
     assert captured == {
         "folder_path": str(folder_path),

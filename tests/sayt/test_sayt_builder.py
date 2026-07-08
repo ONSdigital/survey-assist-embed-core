@@ -140,13 +140,10 @@ def test_builder_writes_manifest_and_corpus(tmp_path, small_corpus):
     }
     assert rows == [
         {
-            "row_id": row_id,
             "search_text": search_text,
             "display_text": display_text,
         }
-        for row_id, search_text, display_text in CleanCorpus.model_validate(
-            small_corpus
-        ).rows
+        for search_text, display_text in CleanCorpus.model_validate(small_corpus).rows
     ]
 
 
@@ -204,7 +201,8 @@ def test_from_artifact_loads_persisted_ngram_filespace(
     """Load persisted dense retrievers from their artifact filespaces."""
     captured = {}
     artifact_dir = tmp_path / "artifact"
-    target_row_id, _, target_display = CleanCorpus.model_validate(small_corpus).rows[-1]
+    corpus_rows = CleanCorpus.model_validate(small_corpus).rows
+    _, target_display = corpus_rows[-1]
 
     class _StubPersistentVectorStore:
         def __init__(  # noqa: PLR0913
@@ -232,9 +230,12 @@ def test_from_artifact_loads_persisted_ngram_filespace(
             return _StubLoadedVectorStore()
 
     class _StubSearchResults:
+        def __getitem__(self, column):
+            return pd.Series([{"doc_label": target_display, "score": 1.0}[column]])
+
         def to_dict(self, orient="records"):
             assert orient == "records"
-            return [{"doc_label": target_row_id, "score": 1.0}]
+            return [{"doc_label": target_display, "score": 1.0}]
 
     class _StubLoadedVectorStore:
         num_vectors = 1

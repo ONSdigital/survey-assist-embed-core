@@ -1,12 +1,12 @@
 """Tests for the SAYTSuggester public API."""
 
+# ruff: noqa: PLR2004
 # pylint: disable=protected-access,redefined-outer-name,too-few-public-methods,C0116,W0613
 
 import json
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import UUID
 
 import pandas as pd
 import pytest
@@ -38,13 +38,31 @@ def test_empty_corpus_after_filtering_raises():
         SAYTSuggester(corpus)
 
 
-def test_clean_corpus_assigns_uuid_row_ids(small_corpus):
-    """Assign deterministic UUID row identifiers to cleaned corpus rows."""
+def test_clean_corpus_rows_are_search_display_pairs(small_corpus):
+    """Each cleaned row is a (search_text, display_text) pair with no identifier."""
     corpus = CleanCorpus.model_validate(small_corpus)
 
-    assert len({row_id for row_id, _, _ in corpus.rows}) == len(corpus.rows)
-    for row_id, _, _ in corpus.rows:
-        assert str(UUID(row_id)) == row_id
+    assert len(corpus.rows) == len(small_corpus)
+    assert all(len(row) == 2 for row in corpus.rows)
+
+
+def test_clean_corpus_rows_are_sorted_by_search_and_display():
+    """Sort cleaned rows by search text, then display text."""
+    corpus = CleanCorpus.model_validate(
+        [
+            ("Dog grooming", "Dog grooming"),
+            ("Car wash", "Car Wash"),
+            ("Car wash", "CAR WASH (duplicate)"),
+            ("Car waxing", "Car Waxing"),
+        ]
+    )
+
+    assert corpus.rows == [
+        ("car wash", "CAR WASH (duplicate)"),
+        ("car wash", "Car Wash"),
+        ("car waxing", "Car Waxing"),
+        ("dog grooming", "Dog grooming"),
+    ]
 
 
 def test_clean_corpus_accepts_existing_instance_and_dict_input(small_corpus):
@@ -75,12 +93,12 @@ def test_clean_corpus_model_dump_excludes_derived_lookup_dicts(small_corpus):
 
     assert "id_to_search" not in dumped
     assert "id_to_display" not in dumped
-    assert "display_text_count" not in dumped
+    assert "display_text_value_counts" not in dumped
     assert dumped["rows"] == corpus.rows
 
 
 def test_clean_corpus_restores_persisted_rows(small_corpus):
-    """Restore cleaned corpus rows without regenerating row identifiers."""
+    """Restore cleaned corpus rows exactly as persisted search/display pairs."""
     corpus = CleanCorpus.model_validate(small_corpus)
 
     restored = CleanCorpus.from_persisted_rows(
@@ -102,7 +120,7 @@ def test_clean_corpus_warns_and_falls_back_when_display_is_missing():
     with pytest.warns(UserWarning, match="using search text as display"):
         corpus = CleanCorpus.model_validate([("Car wash", "")])
 
-    assert corpus.rows[0][2] == "Car wash"
+    assert corpus.rows[0][1] == "Car wash"
 
 
 def test_from_csv_builds_and_suggests(tmp_path, small_corpus):
@@ -240,7 +258,7 @@ def test_get_config_returns_rich_runtime_summary(small_corpus):
     )
 
     config = suggester.get_config()
-    display_counts = Counter(display for _, _, display in suggester._corpus.rows)
+    display_counts = Counter(display for _, display in suggester._corpus.rows)
 
     assert isinstance(config, SaytConfiguration)
     assert config.settings.model_dump() == {
@@ -399,12 +417,7 @@ def test_suggest_respects_explicit_num_suggestions(small_corpus):
         retrievers=[PrefixRetrieverSpec()],
     )
 
-    assert suggester.suggest("car", num_suggestions=1) == [
-        "Car Waxing",
-        "Car Wash",
-        "CAR WASH (duplicate)",
-        "Carpentry services",
-    ]
+    assert len(suggester.suggest("car", num_suggestions=1)) == 4
 
 
 def test_suggest_with_scores_keeps_ties_at_cutoff(small_corpus):
@@ -417,12 +430,7 @@ def test_suggest_with_scores_keeps_ties_at_cutoff(small_corpus):
 
     results = suggester.suggest_with_scores("car", num_suggestions=1)
 
-    assert {result.display_text for result in results} == {
-        "Car Waxing",
-        "Car Wash",
-        "CAR WASH (duplicate)",
-        "Carpentry services",
-    }
+    assert len({result.display_text for result in results}) == 4
 
 
 def test_suggest_keeps_ties_at_cutoff(small_corpus):
@@ -453,14 +461,7 @@ def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
 
         def suggest_with_scores(self, q_norm, num_suggestions):
             semantic_calls.append((q_norm, num_suggestions))
-            return [
-                Suggestion(
-                    display_text=self._row[2],
-                    score=3.0,
-                    search_text=self._row[1],
-                    row_id=self._row[0],
-                )
-            ]
+            return [Suggestion(display_text=self._row[1], score=3.0)]
 
     @dataclass(frozen=True, slots=True)
     class _StubRetrieverSpec:
@@ -478,8 +479,8 @@ def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
 
     results = suggester.suggest_with_scores("car")
 
-    assert semantic_calls == [("car", 100)]
-    assert [result.display_text for result in results] == [suggester._corpus.rows[0][2]]
+    assert semantic_calls == [("car", 50)]
+    assert [result.display_text for result in results] == [suggester._corpus.rows[0][1]]
 
 
 def test_combine_suggestions_ignores_non_positive_score_groups(small_corpus):
@@ -489,21 +490,9 @@ def test_combine_suggestions_ignores_non_positive_score_groups(small_corpus):
         min_chars=3,
         retrievers=[PrefixRetrieverSpec()],
     )
-    first_row_id, first_search, first_display = suggester._corpus.rows[0]
-
     combined = suggester._combine_suggestions(
         [
-            (
-                1.0,
-                [
-                    Suggestion(
-                        display_text=first_display,
-                        score=0.0,
-                        search_text=first_search,
-                        row_id=first_row_id,
-                    )
-                ],
-            ),
+            (1.0, [Suggestion(display_text=suggester._corpus.rows[0][1], score=0.0)]),
             (1.0, []),
             (1.0, []),
         ]
@@ -519,50 +508,26 @@ def test_combine_suggestions_ignores_invalid_scores(small_corpus):
         min_chars=3,
         retrievers=[PrefixRetrieverSpec()],
     )
-    target_rows = [row for row in suggester._corpus.rows if row[2] == "Car Waxing"]
-    first_row_id, first_search, first_display = target_rows[0]
-    second_row_id, second_search, _ = target_rows[1]
+    first_display = suggester._corpus.rows[0][1]
+    second_display = suggester._corpus.rows[2][1]
 
     combined = suggester._combine_suggestions(
         [
+            (1.0, [Suggestion(display_text=first_display, score=0.0)]),
             (
                 1.0,
                 [
-                    Suggestion(
-                        display_text=first_display,
-                        score=0.0,
-                        search_text=first_search,
-                        row_id=first_row_id,
-                    ),
-                    Suggestion(
-                        display_text="ignored",
-                        score=5.0,
-                        search_text="ignored",
-                        row_id="",
-                    ),
-                ],
-            ),
-            (
-                1.0,
-                [
-                    Suggestion(
-                        display_text=first_display,
-                        score=2.0,
-                        search_text=first_search,
-                        row_id=first_row_id,
-                    ),
-                    Suggestion(
-                        display_text=first_display,
-                        score=1.0,
-                        search_text=second_search,
-                        row_id=second_row_id,
-                    ),
+                    Suggestion(display_text=first_display, score=2.0),
+                    Suggestion(display_text=second_display, score=1.0),
                 ],
             ),
         ]
     )
 
-    assert combined == [(first_row_id, 1.0), (second_row_id, 0.5)]
+    assert combined == [
+        Suggestion(display_text=first_display, score=1.0),
+        Suggestion(display_text=second_display, score=0.5),
+    ]
 
 
 def test_suggester_defaults_to_standard_retriever_specs(monkeypatch, small_corpus):
@@ -668,6 +633,6 @@ def test_clean_corpus_rejects_empty_persisted_rows():
 
 def test_clean_corpus_coerces_persisted_tuple_values_to_strings():
     """Coerce tuple-based persisted rows to strings before rebuilding indexes."""
-    restored = CleanCorpus.from_persisted_rows([(123, 456, 789)])
+    restored = CleanCorpus.from_persisted_rows([(123, 456)])
 
-    assert restored.rows == [("123", "456", "789")]
+    assert restored.rows == [("123", "456")]

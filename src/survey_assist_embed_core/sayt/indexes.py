@@ -5,6 +5,7 @@
 import csv
 import os
 import tempfile
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,8 +17,11 @@ from classifai.indexers import VectorStore, VectorStoreSearchInput
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
+from survey_assist_utils import get_logger
 
-from survey_assist_embed_core.sayt.core import CleanCorpus, take_with_ties
+from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
+
+logger = get_logger(__name__)
 
 
 def _silent_tqdm(iterable, **_kwargs):
@@ -36,6 +40,33 @@ def _silence_classifai_tqdm():
         classifai_indexers_main.tqdm = previous_tqdm
 
 
+def _derive_num_retrieved_based_on_duplication(
+    n_suggestions: int, max_duplication: int, corpus_size: int
+) -> int:
+    """Derive dense retrieval number of candidates from requested size and corpus duplication.
+
+    The number of candidates is intentionally dampened using ``log2(max_duplication) + 1``
+    rather than scaling linearly with ``max_duplication``. This keeps candidate
+    growth sub-linear when many rows share the same display text, balancing
+    recall against dense query cost.
+
+    Args:
+        n_suggestions: Requested number of final suggestions.
+        max_duplication: Maximum count of any display text in the corpus.
+        corpus_size: Total number of indexed rows.
+
+    Returns:
+        Candidate count for vector-store search, capped at corpus size.
+    """
+    if n_suggestions < 1 or corpus_size < 1:
+        return 0
+
+    dampen_max_duplication = int(np.log2(max(max_duplication, 1)) + 1)
+
+    out = min(corpus_size, n_suggestions * dampen_max_duplication)
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class DenseVectorIndex:
     """Wrap a ClassifAI vector store for query-time dense retrieval."""
@@ -43,6 +74,7 @@ class DenseVectorIndex:
     _vector_store: VectorStore
     _num_vectors: int
     _corpus: CleanCorpus
+    _max_duplication: int = 1
 
     @classmethod
     def from_corpus(
@@ -93,6 +125,7 @@ class DenseVectorIndex:
             _vector_store=vector_store,
             _num_vectors=int(vector_store.num_vectors or 0),
             _corpus=corpus,
+            _max_duplication=max(corpus.display_text_value_counts.values(), default=1),
         )
 
     @classmethod
@@ -125,6 +158,7 @@ class DenseVectorIndex:
             _vector_store=vector_store,
             _num_vectors=int(vector_store.num_vectors or 0),
             _corpus=corpus,
+            _max_duplication=max(corpus.display_text_value_counts.values(), default=1),
         )
 
     @staticmethod
@@ -132,40 +166,73 @@ class DenseVectorIndex:
         corpus: CleanCorpus,
         csv_path: str | os.PathLike[str],
     ) -> None:
-        """Write the row-id and search-text schema expected by ClassifAI."""
+        """Write the display-label and search-text schema expected by ClassifAI."""
         csv_file = Path(csv_path)
         csv_file.parent.mkdir(parents=True, exist_ok=True)
         with open(csv_file, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=["label", "text"])
             writer.writeheader()
             writer.writerows(
-                {"label": row_id, "text": search_text}
-                for row_id, search_text, _ in corpus.rows
+                {"label": display_text, "text": search_text}
+                for search_text, display_text in corpus.rows
             )
 
-    def query(self, q_norm: str, num_suggestions: int) -> list[tuple[str, float]]:
+    def query(self, q_norm: str, num_suggestions: int) -> list[Suggestion]:
         """Query the dense index with a normalised string.
 
         Args:
             q_norm: Normalised query text.
-            num_suggestions: Maximum number of scored row ids to return before
+            num_suggestions: Maximum number of scored suggestions to return before
                 tie expansion.
 
         Returns:
-            Ranked ``(row_id, score)`` pairs from the dense vector store.
+            Ranked ``Suggestion`` objects from the dense vector store.
+
+        Notes:
+            - Dense retrieval first fetches more than ``num_suggestions`` using
+              ``_derive_num_retrieved_based_on_duplication``.
+            - The widened candidate list is then ranked and trimmed with
+              ``take_with_ties`` to preserve cutoff ties.
+            - If the widened candidate list is still too small to satisfy ``num_suggestions``,
+              the retrieval is repeated with a larger candidate count until either
+              the corpus is exhausted or enough candidates are found.
         """
         if self._num_vectors < 1 or num_suggestions < 1:
             return []
 
-        n_results = min(self._num_vectors, num_suggestions * 2)
+        start_time = time.time()
+
         search_input = VectorStoreSearchInput({"id": ["q1"], "query": [q_norm]})
-        with _silence_classifai_tqdm():
-            results = self._vector_store.search(search_input, n_results=n_results)
-        out = [
-            (row["doc_label"], float(row["score"]))
-            for row in results.to_dict(orient="records")
-        ]
-        return take_with_ties(out, limit=num_suggestions)
+        num_results = _derive_num_retrieved_based_on_duplication(
+            num_suggestions, self._max_duplication, self._num_vectors
+        )
+
+        while True:
+            with _silence_classifai_tqdm():
+                results = self._vector_store.search(search_input, n_results=num_results)
+
+            labels = results["doc_label"].tolist()
+            scores = results["score"].tolist()
+            suggestions = [
+                Suggestion(display_text=label, score=score)
+                for label, score in zip(labels, scores, strict=True)
+            ]
+            out = take_with_ties(suggestions, limit=num_suggestions)
+
+            elapsed_time = time.time() - start_time
+            logger.debug(
+                "Dense index query time (low level)",
+                query_time_ms=elapsed_time * 1000,
+                num_sem_results_requested=num_results,
+                num_sem_results_returned=len(suggestions),
+                num_suggestions_requested=num_suggestions,
+                num_suggestions_returned=len(out),
+            )
+
+            if len(out) < num_suggestions and num_results < self._num_vectors:
+                num_results = min(self._num_vectors, num_results * 2)
+            else:
+                return out
 
 
 class _L2NormalisingVectoriser(VectoriserBase):
@@ -232,7 +299,7 @@ def build_ngram_index(
     return DenseVectorIndex.from_corpus(
         corpus=corpus,
         vectoriser=_CharNgramVectoriser(
-            [search for _, search, _ in corpus.rows],
+            [search for search, _ in corpus.rows],
             n=n,
             max_df=max_df,
         ),
@@ -253,7 +320,7 @@ def load_ngram_index(
         corpus=corpus,
         folder_path=folder_path,
         vectoriser=_CharNgramVectoriser(
-            [search for _, search, _ in corpus.rows],
+            [search for search, _ in corpus.rows],
             n=n,
             max_df=max_df,
         ),
