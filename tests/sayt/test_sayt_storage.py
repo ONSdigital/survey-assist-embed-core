@@ -169,22 +169,30 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
     """Round-trip semantic artifact state and delegate dense index load/build calls."""
     captured = {}
     corpus = CleanCorpus.model_validate(small_corpus)
-    spec = SemanticRetrieverSpec(model="all-MiniLM-L6-v2", weight=2.5)
+    spec = SemanticRetrieverSpec(
+        model="all-MiniLM-L6-v2",
+        weight=2.5,
+        vectorizer_class="OnnxVectoriser",
+    )
     stored_retriever = storage._build_stored_retriever(2, spec)
     path = tmp_path / stored_retriever.path
 
-    def _fake_build_semantic_index(corpus_arg, *, model, output_dir, overwrite):
+    def _fake_build_semantic_index(
+        corpus_arg, *, model, vectorizer_class, output_dir, overwrite
+    ):
         captured["build"] = {
             "corpus": corpus_arg,
             "model": model,
+            "vectorizer_class": vectorizer_class,
             "output_dir": output_dir,
             "overwrite": overwrite,
         }
 
-    def _fake_load_semantic_index(corpus_arg, *, model, folder_path):
+    def _fake_load_semantic_index(corpus_arg, *, model, vectorizer_class, folder_path):
         captured["load"] = {
             "corpus": corpus_arg,
             "model": model,
+            "vectorizer_class": vectorizer_class,
             "folder_path": folder_path,
         }
         return "loaded-index"
@@ -212,7 +220,10 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
             "type": stored_retriever.spec.name,
             "weight": spec.weight,
             "path": stored_retriever.path,
-            "config": {"model": "all-MiniLM-L6-v2"},
+            "config": {
+                "model": "all-MiniLM-L6-v2",
+                "vectorizer_class": "OnnxVectoriser",
+            },
         }
     )
 
@@ -220,6 +231,7 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
     assert stored_retriever.path == "retrievers/02-semantic"
     assert isinstance(rebuilt.spec, SemanticRetrieverSpec)
     assert rebuilt.spec.weight == pytest.approx(2.5)
+    assert rebuilt.spec.vectorizer_class == "OnnxVectoriser"
 
     storage.build_retriever_artifact(
         corpus=corpus,
@@ -239,12 +251,14 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
         "build": {
             "corpus": corpus,
             "model": "all-MiniLM-L6-v2",
+            "vectorizer_class": "OnnxVectoriser",
             "output_dir": path,
             "overwrite": True,
         },
         "load": {
             "corpus": corpus,
             "model": "all-MiniLM-L6-v2",
+            "vectorizer_class": "OnnxVectoriser",
             "folder_path": path,
         },
         "from_index": {
@@ -253,3 +267,21 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
             "index": "loaded-index",
         },
     }
+
+
+def test_deserialise_semantic_retriever_accepts_legacy_vectoriser_class_key():
+    """Support legacy manifest spelling for semantic vectorizer class config."""
+    stored = storage._deserialise_stored_retriever(
+        {
+            "type": "semantic",
+            "weight": 1.0,
+            "path": "retrievers/02-semantic",
+            "config": {
+                "model": "all-MiniLM-L6-v2",
+                "vectoriser_class": "NormalisedHFVectoriser",
+            },
+        }
+    )
+
+    assert isinstance(stored.spec, SemanticRetrieverSpec)
+    assert stored.spec.vectorizer_class == "NormalisedHFVectoriser"

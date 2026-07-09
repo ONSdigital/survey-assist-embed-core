@@ -12,12 +12,13 @@ import numpy as np
 import pytest
 from classifai.vectorisers import VectoriserBase
 
+import survey_assist_embed_core.adapters.classifai.vectoriser as vectoriser_module
 from survey_assist_embed_core.sayt import NgramRetrieverSpec, PrefixRetrieverSpec
 from survey_assist_embed_core.sayt.core import CleanCorpus
 from survey_assist_embed_core.sayt.indexes import (
     DenseVectorIndex,
+    OnnxVectoriser,
     _CharNgramVectoriser,
-    _L2NormalisingVectoriser,
     load_semantic_index,
 )
 from survey_assist_embed_core.sayt.retrievers import (
@@ -151,26 +152,57 @@ def test_prefix_retriever_keeps_ties_at_cutoff():
     assert [s.display_text for s in results] == ["Car Wash", "Car Waxing"]
 
 
-def test_l2_normalising_vectoriser_handles_one_dimensional_output():
+def test_onnx_vectoriser_handles_one_dimensional_output(monkeypatch):
     """Normalise a single returned embedding into a 2D unit vector."""
-    vectoriser = _L2NormalisingVectoriser(_StubVectoriser(np.array([3.0, 4.0])))
 
-    vectors = vectoriser.transform(["query"])
+    class _StubTextEmbedding:
+        def __init__(self, model_name_or_path, device=None):
+            _ = (model_name_or_path, device)
+
+        def encode(self, texts):
+            _ = texts
+            return [np.array([3.0, 4.0], dtype=np.float32)]
+
+    vectoriser_module._onnx_model_cache.clear()
+    monkeypatch.setattr(vectoriser_module, "TextEmbedding", _StubTextEmbedding)
+
+    vectoriser = OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
+
+    vectors = vectoriser.transform("query")
 
     assert vectors.shape == (1, 2)
     assert vectors[0] == pytest.approx(np.array([0.6, 0.8]))
 
 
-def test_l2_normalising_vectoriser_preserves_two_dimensional_output():
+def test_normalise_vectors_preserves_two_dimensional_output():
     """Normalise batched vectors without reshaping an existing matrix."""
-    vectoriser = _L2NormalisingVectoriser(
-        _StubVectoriser(np.array([[3.0, 4.0], [5.0, 12.0]]))
-    )
-
-    vectors = vectoriser.transform(["first", "second"])
+    vectors = vectoriser_module.normalise_vectors(np.array([[3.0, 4.0], [5.0, 12.0]]))
 
     assert vectors.shape == (2, 2)
     assert np.linalg.norm(vectors, axis=1) == pytest.approx(np.array([1.0, 1.0]))
+
+
+def test_onnx_vectoriser_reuses_cached_text_embedding(monkeypatch):
+    """Reuse a single TextEmbedding instance for the same resolved model name."""
+    captured = []
+
+    class _StubTextEmbedding:
+        def __init__(self, model_name_or_path, device=None):
+            captured.append(model_name_or_path)
+            _ = device
+
+        def encode(self, texts):
+            _ = texts
+            return [np.array([1.0, 0.0], dtype=np.float32)]
+
+    vectoriser_module._onnx_model_cache.clear()
+    monkeypatch.setattr(vectoriser_module, "TextEmbedding", _StubTextEmbedding)
+
+    first = OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
+    second = OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
+
+    assert captured == ["sentence-transformers/all-MiniLM-L6-v2"]
+    assert first.model is second.model
 
 
 def test_char_ngram_vectoriser_accepts_single_string_input():
@@ -372,11 +404,13 @@ def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
     captured = {}
     corpus = CleanCorpus.model_validate(small_corpus)
 
-    class _StubHFVectoriser:
-        def __init__(self, model_name):
+    class _StubNormalisedHFVectoriser:
+        def __init__(self, model_name, device=None):
             captured["model_name"] = model_name
+            captured["device"] = device
 
         def transform(self, texts):
+            _ = texts
             return np.array([[1.0, 0.0]])
 
     def _fake_build_dense_vector_index(
@@ -396,19 +430,25 @@ def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
         )
 
     monkeypatch.setattr(
-        "survey_assist_embed_core.sayt.indexes.HuggingFaceVectoriser",
-        _StubHFVectoriser,
+        "survey_assist_embed_core.sayt.indexes.NormalisedHFVectoriser",
+        _StubNormalisedHFVectoriser,
     )
     monkeypatch.setattr(
         "survey_assist_embed_core.sayt.indexes.DenseVectorIndex.from_corpus",
         _fake_build_dense_vector_index,
     )
 
-    retriever = SemanticRetriever(corpus, model="all-MiniLM-L6-v2", min_chars=3)
+    retriever = SemanticRetriever(
+        corpus,
+        model="all-MiniLM-L6-v2",
+        vectorizer_class="HF",
+        min_chars=3,
+    )
 
     assert captured == {
         "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-        "vectoriser_type": "_L2NormalisingVectoriser",
+        "device": None,
+        "vectoriser_type": "_StubNormalisedHFVectoriser",
         "output_dir": None,
         "overwrite": True,
     }
@@ -423,9 +463,10 @@ def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
     corpus = CleanCorpus.model_validate(small_corpus)
     folder_path = tmp_path / "existing-semantic"
 
-    class _StubHFVectoriser:
-        def __init__(self, model_name):
+    class _StubNormalisedHFVectoriser:
+        def __init__(self, model_name, device=None):
             captured["model_name"] = model_name
+            captured["device"] = device
 
         def transform(self, texts):
             _ = texts
@@ -442,8 +483,8 @@ def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
         )
 
     monkeypatch.setattr(
-        "survey_assist_embed_core.sayt.indexes.HuggingFaceVectoriser",
-        _StubHFVectoriser,
+        "survey_assist_embed_core.sayt.indexes.NormalisedHFVectoriser",
+        _StubNormalisedHFVectoriser,
     )
     monkeypatch.setattr(
         "survey_assist_embed_core.sayt.indexes.DenseVectorIndex.from_filespace",
@@ -453,15 +494,17 @@ def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
     index = load_semantic_index(
         corpus,
         model="all-MiniLM-L6-v2",
+        vectorizer_class="HF",
         folder_path=folder_path,
     )
 
     assert index._num_vectors == 2
     assert captured == {
         "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+        "device": None,
         "corpus": corpus,
         "folder_path": folder_path,
-        "vectoriser_type": "_L2NormalisingVectoriser",
+        "vectoriser_type": "_StubNormalisedHFVectoriser",
     }
 
 

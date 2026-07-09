@@ -1,18 +1,72 @@
 """ClassifAI vectoriser helpers for retrieval backends."""
 
+# pylint: disable=too-few-public-methods
+
+from threading import Lock
+
 import numpy as np
-from classifai.vectorisers import HuggingFaceVectoriser
+from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
+from light_embed import TextEmbedding
+
+_onnx_model_cache: dict[tuple[str, str | None], TextEmbedding] = {}
+_onnx_model_cache_lock = Lock()
 
 
-# pylint: disable-next=too-few-public-methods
+def _get_cached_onnx_model(model: str, *, device: str | None = None) -> TextEmbedding:
+    """Return a process-local cached ONNX embedding model."""
+    cache_key = (model, device)
+    cached_model = _onnx_model_cache.get(cache_key)
+    if cached_model is not None:
+        return cached_model
+
+    with _onnx_model_cache_lock:
+        cached_model = _onnx_model_cache.get(cache_key)
+        if cached_model is None:
+            cached_model = TextEmbedding(model_name_or_path=model, device=device)
+            _onnx_model_cache[cache_key] = cached_model
+
+    return cached_model
+
+
+class OnnxVectoriser(VectoriserBase):
+    """Sentence embedding vectoriser using light_embed with ONNX backend.
+
+    Supports both HuggingFace model names and local paths. The model is cached
+    at module level so initialization only happens once per process.
+    Outputs are L2-normalised.
+    """
+
+    def __init__(self, model: str, *, device: str | None = None) -> None:
+        """Load or retrieve cached TextEmbedding model."""
+        self.model = _get_cached_onnx_model(model, device=device)
+        self.model_name = model
+        self.device = device
+
+    def transform(self, texts: list[str] | str) -> np.ndarray:
+        """Encode texts and return L2-normalised embeddings."""
+        if isinstance(texts, str):
+            texts = [texts]
+
+        vectors = np.asarray(list(self.model.encode(texts)), dtype=np.float32)
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+
+        return normalise_vectors(vectors)
+
+
+def normalise_vectors(vectors: np.ndarray) -> np.ndarray:
+    """L2-normalise a 2D array of vectors."""
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1.0, norms)
+    return vectors / norms
+
+
 class NormalisedHFVectoriser(HuggingFaceVectoriser):
     """HuggingFace vectoriser that normalises embeddings to unit length."""
 
-    def _normalize(self, vectors: np.ndarray) -> np.ndarray:
-        """Normalise row vectors to unit length."""
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        norms = np.where(norms == 0, 1.0, norms)
-        return vectors / norms
+    def __init__(self, model_name: str, *, device: str | None = None) -> None:
+        """Initialise the wrapped Hugging Face model on the requested device."""
+        super().__init__(model_name=model_name, device=device)
 
     def transform(self, texts: list[str] | str) -> np.ndarray:
         """Transform text into unit-normalised embeddings.
@@ -27,4 +81,4 @@ class NormalisedHFVectoriser(HuggingFaceVectoriser):
             texts = [texts]
 
         vectors = super().transform(texts)
-        return self._normalize(vectors)
+        return normalise_vectors(vectors)

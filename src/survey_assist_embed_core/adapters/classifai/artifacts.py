@@ -7,6 +7,7 @@ METADATA_FILE_NAME = "metadata.json"
 VECTORS_FILE_NAME = "vectors.parquet"
 INDEX_SOURCE_FILE_KEY = "index_source_file"
 EMBEDDING_MODEL_NAME_KEY = "embedding_model_name"
+VECTORIZER_CLASS_KEY = "vectoriser_class"
 
 
 def write_vector_store_metadata(
@@ -92,6 +93,20 @@ def read_embedding_model_name(*, folder_path: str) -> str | None:
     """
     metadata = _read_metadata(folder_path)
     return metadata.get(EMBEDDING_MODEL_NAME_KEY)
+
+
+def read_vectoriser_class(*, folder_path: str) -> str | None:
+    """Read the recorded vectoriser class name from persisted metadata.
+
+    Args:
+        folder_path: Folder that contains the persisted vector-store artifacts.
+
+    Returns:
+        The vectoriser class name recorded in metadata, or ``None`` when the
+        value is absent.
+    """
+    metadata = _read_metadata(folder_path)
+    return metadata.get(VECTORIZER_CLASS_KEY)
 
 
 def _has_persisted_vector_store(folder_path: str) -> bool:

@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+import survey_assist_embed_core.adapters.classifai.vectoriser as vectoriser_module
 from survey_assist_embed_core.adapters.classifai import (
     ClassifaiVectorBackend,
     NormalisedHFVectoriser,
@@ -464,18 +465,36 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     assert cfg.backend.settings == {"embedding_model_name": "other"}
 
 
+def test_embedding_handler_constructs_default_backend_without_legacy_device(
+    tmp_path: Path,
+) -> None:
+    store = SimpleNamespace(num_vectors=7)
+
+    with (
+        patch(
+            "survey_assist_embed_core.embed.embedding.ClassifaiVectorBackend",
+        ) as mock_backend_cls,
+        patch(
+            "survey_assist_embed_core.embed.embedding.EmbeddingHandler._load_existing_vector_store",
+            return_value=(store, "mock-source.csv"),
+        ),
+    ):
+        mock_backend_cls.return_value = ClassifaiVectorBackend()
+        EmbeddingHandler(db_dir=str(tmp_path / "vector_store"))
+
+    mock_backend_cls.assert_called_once_with()
+
+
 def test_normalised_hf_vectoriser_normalize_unit_vectors() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[3.0, 4.0], [1.0, 0.0]])
-    result = inst._normalize(vectors)
+    result = vectoriser_module.normalise_vectors(vectors)
 
     assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
 
 
 def test_normalised_hf_vectoriser_zero_vectors_do_not_divide_by_zero() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[0.0, 0.0], [1.0, 0.0]])
-    result = inst._normalize(vectors)
+    result = vectoriser_module.normalise_vectors(vectors)
 
     assert np.allclose(result[0], [0.0, 0.0])
     assert np.allclose(np.linalg.norm(result[1]), 1.0)

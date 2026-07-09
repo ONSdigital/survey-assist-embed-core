@@ -14,17 +14,35 @@ from typing import cast
 import classifai.indexers.main as classifai_indexers_main
 import numpy as np
 from classifai.indexers import VectorStore, VectorStoreSearchInput
-from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
-from light_embed import TextEmbedding
+from classifai.vectorisers import VectoriserBase
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 from survey_assist_utils import get_logger
 
+from survey_assist_embed_core.adapters.classifai.vector_backend import (
+    resolve_model_name,
+    resolve_vectorizer_class,
+)
+from survey_assist_embed_core.adapters.classifai.vectoriser import (
+    NormalisedHFVectoriser,
+    OnnxVectoriser,
+    normalise_vectors,
+)
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
 logger = get_logger(__name__)
 
-USE_ONNX = False  # Use ONNX backend for sentence-transformer embeddings
+
+def _build_semantic_vectoriser(
+    *,
+    semantic_model: str,
+    vectorizer_class: str | None,
+) -> VectoriserBase:
+    """Construct a semantic vectoriser from the requested class name."""
+    selected_class = resolve_vectorizer_class(vectorizer_class)
+    if selected_class == "ONNX":
+        return OnnxVectoriser(semantic_model)
+    return NormalisedHFVectoriser(semantic_model)
 
 
 def _silent_tqdm(iterable, **_kwargs):
@@ -238,62 +256,6 @@ class DenseVectorIndex:
                 return out
 
 
-def _normalise(vectors: np.ndarray) -> np.ndarray:
-    """L2-normalise a 2D array of vectors."""
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    return vectors / np.clip(norms, 1e-12, None)
-
-
-class _L2NormalisingVectoriser(VectoriserBase):
-    """Wraps a classifai vectoriser and L2-normalises its outputs."""
-
-    def __init__(self, base: VectoriserBase) -> None:
-        """Store the wrapped vectoriser used for raw embeddings."""
-        self._base = base
-
-    def transform(self, texts: str | list[str]) -> np.ndarray:
-        """Vectorise inputs and scale each output row to unit length."""
-        vectors = self._base.transform(texts)
-        vectors = np.asarray(vectors, dtype=float)
-        if vectors.ndim == 1:
-            vectors = vectors.reshape(1, -1)
-
-        vectors = _normalise(vectors)
-        return vectors
-
-
-def _resolve_sentence_transformer_model(model: str) -> str:
-    return model if "/" in model else f"sentence-transformers/{model}"
-
-
-class _OnnxVectoriser(VectoriserBase):
-    """Sentence embedding vectoriser using light_embed with ONNX backend.
-
-    Supports both HuggingFace model names and local paths. The model is cached
-    at module level so initialization only happens once per process.
-    Outputs are L2-normalised.
-    """
-
-    def __init__(self, model: str) -> None:
-        """Load or retrieve cached TextEmbedding model."""
-        resolved_name = _resolve_sentence_transformer_model(model)
-
-        self.model = TextEmbedding(model_name_or_path=resolved_name)
-        self.model_name = resolved_name
-
-    def transform(self, texts: list[str] | str) -> np.ndarray:
-        """Encode texts and return L2-normalised embeddings."""
-        if isinstance(texts, str):
-            texts = [texts]
-
-        vectors = np.asarray(list(self.model.encode(texts)), dtype=np.float32)
-        if vectors.ndim == 1:
-            vectors = vectors.reshape(1, -1)
-
-        vectors = _normalise(vectors)
-        return vectors
-
-
 class _CharNgramVectoriser(VectoriserBase):
     """CountVectorizer char_wb n-gram vectoriser with unit-length outputs."""
 
@@ -313,8 +275,7 @@ class _CharNgramVectoriser(VectoriserBase):
         matrix = cast(csr_matrix, self._vectoriser.transform(texts))
         vectors = matrix.toarray().astype(float, copy=False)
 
-        vectors = _normalise(vectors)
-        return vectors
+        return normalise_vectors(vectors)
 
 
 def build_ngram_index(
@@ -374,6 +335,7 @@ def build_semantic_index(
     corpus: CleanCorpus,
     *,
     model: str,
+    vectorizer_class: str | None = None,
     output_dir: str | os.PathLike[str] | None = None,
     overwrite: bool = True,
 ) -> DenseVectorIndex:
@@ -382,6 +344,10 @@ def build_semantic_index(
     Args:
         corpus: Cleaned corpus to index.
         model: Sentence-transformer model name without the repository prefix.
+        vectorizer_class: Optional semantic vectoriser class or alias to use.
+            Supported ONNX aliases are ``onnx``, ``OnnxVectoriser``, and
+            ``OnnxVectorizer``. Any other value falls back to the normalised
+            HuggingFace vectoriser.
         output_dir: Optional persistent filespace directory for the generated
             vector store.
         overwrite: Whether to allow ClassifAI to replace an existing filespace
@@ -390,11 +356,11 @@ def build_semantic_index(
     Returns:
         A dense index using semantic embeddings.
     """
-    semantic_model = _resolve_sentence_transformer_model(model)
-    semantic_vectoriser = (
-        _OnnxVectoriser(semantic_model)
-        if USE_ONNX
-        else _L2NormalisingVectoriser(HuggingFaceVectoriser(semantic_model))
+    semantic_model = resolve_model_name(model)
+    vectorizer_class = resolve_vectorizer_class(vectorizer_class)
+    semantic_vectoriser = _build_semantic_vectoriser(
+        semantic_model=semantic_model,
+        vectorizer_class=vectorizer_class,
     )
 
     return DenseVectorIndex.from_corpus(
@@ -409,14 +375,15 @@ def load_semantic_index(
     corpus: CleanCorpus,
     *,
     model: str,
+    vectorizer_class: str | None = None,
     folder_path: str | os.PathLike[str],
 ) -> DenseVectorIndex:
     """Load a persisted dense index backed by semantic embeddings."""
-    semantic_model = _resolve_sentence_transformer_model(model)
-    semantic_vectoriser = (
-        _OnnxVectoriser(semantic_model)
-        if USE_ONNX
-        else _L2NormalisingVectoriser(HuggingFaceVectoriser(semantic_model))
+    semantic_model = resolve_model_name(model)
+    vectorizer_class = resolve_vectorizer_class(vectorizer_class)
+    semantic_vectoriser = _build_semantic_vectoriser(
+        semantic_model=semantic_model,
+        vectorizer_class=vectorizer_class,
     )
 
     return DenseVectorIndex.from_filespace(

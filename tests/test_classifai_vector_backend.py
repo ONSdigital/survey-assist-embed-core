@@ -17,8 +17,9 @@ from survey_assist_embed_core.adapters.classifai import (
 )
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
     _ClassifaiVectorIndex,
-    _normalise_model_name,
     _resolve_local_path,
+    resolve_model_name,
+    resolve_vectorizer_class,
 )
 from survey_assist_embed_core.adapters.storage import DownloadedVectorStore
 
@@ -109,7 +110,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
     with (
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "NormalisedHFVectoriser",
+            "_build_vectoriser",
             return_value=vectoriser,
         ) as mock_build_vectoriser,
         patch(
@@ -133,7 +134,8 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         )
 
     mock_build_vectoriser.assert_called_once_with(
-        model_name="sentence-transformers/other"
+        "sentence-transformers/other",
+        vectoriser_class="ONNX",
     )
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
@@ -161,16 +163,42 @@ def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
 def test_classifai_normalise_model_name_prepends_prefix() -> None:
     # bare name gets the default org prepended
     assert (
-        _normalise_model_name("all-MiniLM-L6-v2")
+        resolve_model_name("all-MiniLM-L6-v2")
         == "sentence-transformers/all-MiniLM-L6-v2"
     )
     # fully qualified names of any org pass through unchanged
     assert (
-        _normalise_model_name("sentence-transformers/all-MiniLM-L6-v2")
+        resolve_model_name("sentence-transformers/all-MiniLM-L6-v2")
         == "sentence-transformers/all-MiniLM-L6-v2"
     )
-    assert _normalise_model_name("BAAI/bge-small-en-v1.5") == "BAAI/bge-small-en-v1.5"
-    assert _normalise_model_name("intfloat/e5-small-v2") == "intfloat/e5-small-v2"
+    assert resolve_model_name("BAAI/bge-small-en-v1.5") == "BAAI/bge-small-en-v1.5"
+    assert resolve_model_name("intfloat/e5-small-v2") == "intfloat/e5-small-v2"
+
+
+@pytest.mark.parametrize(
+    "raw_value, expected",
+    [
+        ("ONNX", "ONNX"),
+        ("onnx", "ONNX"),
+        ("onnx_vectoriser", "ONNX"),
+        ("onnx_vectorizer", "ONNX"),
+        ("OnnxVectoriser", "ONNX"),
+        ("HF", "HF"),
+        ("hf", "HF"),
+        ("huggingface", "HF"),
+        ("normalised_hf_vectoriser", "HF"),
+        ("normalized_hf_vectorizer", "HF"),
+    ],
+)
+def test_resolve_vectorizer_class_accepts_aliases(raw_value: str, expected: str):
+    """Accept mixed-case and common alias forms for vectoriser class selection."""
+    assert resolve_vectorizer_class(raw_value) == expected
+
+
+def test_resolve_vectorizer_class_rejects_unknown_alias() -> None:
+    """Reject unsupported class names after alias normalisation."""
+    with pytest.raises(ValueError, match="must resolve to either 'ONNX' or 'HF'"):
+        resolve_vectorizer_class("bert")
 
 
 def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
@@ -190,7 +218,7 @@ def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
     with (
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "NormalisedHFVectoriser",
+            "_build_vectoriser",
             return_value=vectoriser,
         ),
         patch(
@@ -375,8 +403,7 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
     fake_vectoriser = object()
 
     with patch(
-        "survey_assist_embed_core.adapters.classifai.vector_backend."
-        "NormalisedHFVectoriser",
+        "survey_assist_embed_core.adapters.classifai.vector_backend._build_vectoriser",
         return_value=fake_vectoriser,
     ) as mock_vectoriser:
         first = backend._get_vectoriser()
@@ -384,7 +411,112 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
 
     assert first is fake_vectoriser
     assert second is fake_vectoriser
-    mock_vectoriser.assert_called_once_with(model_name="other")
+    mock_vectoriser.assert_called_once_with(
+        "other",
+        vectoriser_class=backend._vectoriser_class,
+    )
+
+
+def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class() -> (
+    None
+):
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend._build_vectoriser",
+            return_value=object(),
+        ) as mock_build_vectoriser,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.VectorStore",
+            return_value=SimpleNamespace(num_vectors=1, search=MagicMock()),
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.write_vector_store_metadata",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend._resolve_local_path",
+            side_effect=contextmanager(lambda path: iter([path])),
+        ),
+    ):
+        build_classifai_vector_store_artifacts(
+            index_source_file="source.csv",
+            output_dir="vector_store",
+            embedding_model_name="other",
+            vectoriser_class="HF",
+        )
+
+    mock_build_vectoriser.assert_called_once_with(
+        "sentence-transformers/other",
+        vectoriser_class="HF",
+    )
+
+
+def test_classifai_vector_backend_rejects_legacy_device_kwarg() -> None:
+    with pytest.raises(TypeError, match="unexpected keyword argument 'device'"):
+        ClassifaiVectorBackend(device="cuda")
+
+
+def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> None:
+    backend = ClassifaiVectorBackend()
+    backend._set_embedding_model_name("other")
+    backend._set_vectoriser_class("HF")
+
+    with patch(
+        "survey_assist_embed_core.adapters.classifai.vector_backend._build_vectoriser",
+        return_value=object(),
+    ) as mock_vectoriser:
+        backend._get_vectoriser()
+
+    mock_vectoriser.assert_called_once_with(
+        "other",
+        vectoriser_class="HF",
+    )
+
+
+def test_classifai_vector_backend_load_uses_persisted_vectoriser_class(
+    tmp_path,
+) -> None:
+    backend = ClassifaiVectorBackend()
+    vectoriser = object()
+    folder_path = str(tmp_path / "vector_store")
+    fake_store = SimpleNamespace(num_vectors=1, search=MagicMock())
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "ensure_persisted_vector_store",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_embedding_model_name",
+            return_value="persisted-model",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_vectoriser_class",
+            return_value="HF",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "_build_vectoriser",
+            return_value=vectoriser,
+        ) as mock_build_vectoriser,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_index_source_file",
+            return_value=None,
+        ),
+    ):
+        backend.load(folder_path=folder_path)
+
+    mock_build_vectoriser.assert_called_once_with(
+        "persisted-model",
+        vectoriser_class="HF",
+    )
 
 
 def test_classifai_vector_backend_set_embedding_model_name_noops_when_unchanged() -> (

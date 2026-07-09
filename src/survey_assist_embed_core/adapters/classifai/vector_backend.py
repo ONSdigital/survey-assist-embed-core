@@ -15,10 +15,13 @@ from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
     read_embedding_model_name,
     read_index_source_file,
+    read_vectoriser_class,
     write_vector_store_metadata,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
     NormalisedHFVectoriser,
+    OnnxVectoriser,
+    VectoriserBase,
 )
 from survey_assist_embed_core.adapters.storage import (
     download_one_file_from_gcs,
@@ -34,12 +37,15 @@ DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME = (
     f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/all-MiniLM-L6-v2"
 )
 
+_DEFAULT_VECTORIZER_CLASS = "ONNX"  # alternatively "HF" for Hugging Face vectoriser
+
 
 def build_classifai_vector_store_artifacts(
     *,
     index_source_file: str,
     output_dir: str,
-    embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
+    embedding_model_name: str | None = None,
+    vectoriser_class: str | None = None,
 ) -> None:
     """Build persisted ClassifAI vector-store artifacts from a source file.
 
@@ -49,15 +55,20 @@ def build_classifai_vector_store_artifacts(
             written.
         embedding_model_name: Embedding model name or fully qualified
             HuggingFace identifier to use during vectorisation.
+        vectoriser_class: Optional vectoriser kind to use for the persisted
+            vector store.  If not provided, the default ONNX vectoriser is used.
     """
-    embedding_model_name = _normalise_model_name(embedding_model_name)
+    embedding_model_name = resolve_model_name(embedding_model_name)
+    vectoriser_class = resolve_vectorizer_class(vectoriser_class)
     logger.info(
         "Starting vector store artifact build",
         embedding_model_name=embedding_model_name,
         output_dir=output_dir,
     )
     with _resolve_local_path(index_source_file) as local_file:
-        vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
+        vectoriser = _build_vectoriser(
+            embedding_model_name, vectoriser_class=vectoriser_class
+        )
         VectorStore(
             file_name=local_file,
             data_type="csv",
@@ -127,7 +138,8 @@ class ClassifaiVectorBackend:
     def __init__(self):
         """Initialise an unloaded backend waiting for persisted metadata."""
         self._embedding_model_name: str | None = None
-        self._vectoriser: NormalisedHFVectoriser | None = None
+        self._vectoriser_class: str | None = None
+        self._vectoriser: VectoriserBase | None = None
 
     @property
     def config(self) -> VectorBackendConfig:
@@ -162,6 +174,7 @@ class ClassifaiVectorBackend:
             )
 
         self._set_embedding_model_name(embedding_model_name)
+        self._set_vectoriser_class(read_vectoriser_class(folder_path=folder_path))
 
         vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
@@ -180,7 +193,16 @@ class ClassifaiVectorBackend:
         self._embedding_model_name = embedding_model_name
         self._vectoriser = None
 
-    def _get_vectoriser(self) -> NormalisedHFVectoriser:
+    def _set_vectoriser_class(self, vectoriser_class: str | None) -> None:
+        """Update the effective vectoriser kind and clear any stale cache."""
+        vectoriser_class = resolve_vectorizer_class(vectoriser_class)
+        if self._vectoriser_class == vectoriser_class:
+            return
+
+        self._vectoriser_class = vectoriser_class
+        self._vectoriser = None
+
+    def _get_vectoriser(self) -> VectoriserBase:
         """Build and cache the default ClassifAI vectoriser."""
         vectoriser = self._vectoriser
         if vectoriser is None:
@@ -189,21 +211,63 @@ class ClassifaiVectorBackend:
                     "embedding_model_name must be loaded from persisted metadata "
                     "before constructing a query vectoriser."
                 )
-            vectoriser = NormalisedHFVectoriser(model_name=self._embedding_model_name)
+            vectoriser = _build_vectoriser(
+                self._embedding_model_name, vectoriser_class=self._vectoriser_class
+            )
             self._vectoriser = vectoriser
         return vectoriser
 
 
-def _normalise_model_name(name: str) -> str:
+def _build_vectoriser(
+    embedding_model_name: str,
+    *,
+    vectoriser_class: str | None = None,
+) -> VectoriserBase:
+    """Construct a concrete vectoriser for the selected backend kind."""
+    if resolve_vectorizer_class(vectoriser_class) == "ONNX":
+        return OnnxVectoriser(model=embedding_model_name)
+    return NormalisedHFVectoriser(model_name=embedding_model_name)
+
+
+def resolve_model_name(name: str | None) -> str:
     """Return a fully-qualified HuggingFace model identifier.
 
     If ``name`` already contains a ``/`` it is treated as a complete
     ``{org}/{model}`` identifier and returned unchanged.  Otherwise the
     sentence-transformers organisation is prepended as the default.
     """
+    if name is None:
+        return DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME
     if "/" in name:
         return name
     return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"
+
+
+def resolve_vectorizer_class(vectorizer_class: str | None) -> str:
+    """Resolve requested vectoriser class into a concrete implementation name."""
+    if vectorizer_class is None:
+        return _DEFAULT_VECTORIZER_CLASS
+    selected_class = str(vectorizer_class).strip()
+    normalised_class = (
+        selected_class.casefold()
+        .replace("_", "")
+        .replace("-", "")
+        .removesuffix("vectoriser")
+        .removesuffix("vectorizer")
+    )
+
+    if normalised_class in {"onnx"}:
+        return "ONNX"
+
+    if normalised_class in {
+        "hf",
+        "huggingface",
+        "normalisedhf",
+        "normalizedhf",
+    }:
+        return "HF"
+
+    raise ValueError("vectorizer_class must resolve to either 'ONNX' or 'HF'")
 
 
 @contextmanager
