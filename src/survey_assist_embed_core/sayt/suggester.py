@@ -128,7 +128,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
         logger.info(
-            "SAYT suggester initialized",
+            "SAYT suggester initialised",
             corpus_size=self._corpus.size,
             retriever_count=len(self._retrievers),
             min_chars=self._min_chars,

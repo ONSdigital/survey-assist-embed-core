@@ -270,7 +270,7 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
 
 
 def test_deserialise_semantic_retriever_accepts_legacy_vectoriser_class_key():
-    """Support legacy manifest spelling for semantic vectorizer class config."""
+    """Support legacy manifest spelling for semantic vectoriser class config."""
     stored = storage._deserialise_stored_retriever(
         {
             "type": "semantic",

@@ -1,4 +1,4 @@
-"""Tests for SAYT retrieval and ranking behavior."""
+"""Tests for SAYT retrieval and ranking behaviour."""
 
 # ruff: noqa: PLR2004
 
