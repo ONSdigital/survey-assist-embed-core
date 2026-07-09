@@ -267,21 +267,3 @@ def test_semantic_retriever_artifact_round_trips_and_loads(
             "index": "loaded-index",
         },
     }
-
-
-def test_deserialise_semantic_retriever_accepts_legacy_vectoriser_class_key():
-    """Support legacy manifest spelling for semantic vectoriser class config."""
-    stored = storage._deserialise_stored_retriever(
-        {
-            "type": "semantic",
-            "weight": 1.0,
-            "path": "retrievers/02-semantic",
-            "config": {
-                "model": "all-MiniLM-L6-v2",
-                "vectoriser_class": "NormalisedHFVectoriser",
-            },
-        }
-    )
-
-    assert isinstance(stored.spec, SemanticRetrieverSpec)
-    assert stored.spec.vectoriser_class == "NormalisedHFVectoriser"

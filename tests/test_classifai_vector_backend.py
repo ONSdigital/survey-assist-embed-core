@@ -454,7 +454,7 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
 def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> None:
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
-    backend._set_vectoriser_class("HF")
+    backend._vectoriser_class = "HF"
 
     with patch(
         "survey_assist_embed_core.adapters.classifai.vector_backend._build_vectoriser",
@@ -468,7 +468,7 @@ def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> Non
     )
 
 
-def test_classifai_vector_backend_load_uses_persisted_vectoriser_class(
+def test_classifai_vector_backend_load_uses_runtime_vectoriser_class(
     tmp_path,
 ) -> None:
     backend = ClassifaiVectorBackend()
@@ -488,11 +488,6 @@ def test_classifai_vector_backend_load_uses_persisted_vectoriser_class(
         ),
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "read_vectoriser_class",
-            return_value="HF",
-        ),
-        patch(
-            "survey_assist_embed_core.adapters.classifai.vector_backend."
             "_build_vectoriser",
             return_value=vectoriser,
         ) as mock_build_vectoriser,
@@ -507,7 +502,7 @@ def test_classifai_vector_backend_load_uses_persisted_vectoriser_class(
             return_value=None,
         ),
     ):
-        backend.load(folder_path=folder_path)
+        backend.load(folder_path=folder_path, vectoriser_class="HF")
 
     mock_build_vectoriser.assert_called_once_with(
         "persisted-model",

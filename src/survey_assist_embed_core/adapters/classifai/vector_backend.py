@@ -15,7 +15,6 @@ from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
     read_embedding_model_name,
     read_index_source_file,
-    read_vectoriser_class,
     write_vector_store_metadata,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
@@ -151,12 +150,19 @@ class ClassifaiVectorBackend:
             },
         )
 
-    def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
+    def load(
+        self,
+        *,
+        folder_path: str,
+        vectoriser_class: str | None = None,
+    ) -> tuple[VectorIndex, str | None]:
         """Load a persisted ClassifAI vector store from a local folder.
 
         Args:
             folder_path: Local folder containing the persisted vector-store
                 artifacts.
+            vectoriser_class: Optional vectoriser kind to use for the loaded
+                vector store.  If not provided, the default ONNX vectoriser is used.
 
         Returns:
             A tuple of the loaded vector index and the recorded source-file
@@ -174,7 +180,7 @@ class ClassifaiVectorBackend:
             )
 
         self._set_embedding_model_name(embedding_model_name)
-        self._set_vectoriser_class(read_vectoriser_class(folder_path=folder_path))
+        self._vectoriser_class = resolve_vectoriser_class(vectoriser_class)
 
         vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
@@ -191,15 +197,6 @@ class ClassifaiVectorBackend:
             return
 
         self._embedding_model_name = embedding_model_name
-        self._vectoriser = None
-
-    def _set_vectoriser_class(self, vectoriser_class: str | None) -> None:
-        """Update the effective vectoriser kind and clear any stale cache."""
-        vectoriser_class = resolve_vectoriser_class(vectoriser_class)
-        if self._vectoriser_class == vectoriser_class:
-            return
-
-        self._vectoriser_class = vectoriser_class
         self._vectoriser = None
 
     def _get_vectoriser(self) -> VectoriserBase:

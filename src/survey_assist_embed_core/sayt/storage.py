@@ -334,8 +334,6 @@ def _deserialise_stored_retriever(payload: dict[str, object]) -> StoredRetriever
         )
     elif retriever_type == "semantic":
         vectoriser_class = config.get("vectoriser_class")
-        if vectoriser_class is None:
-            vectoriser_class = config.get("vectoriser_class")
         spec = SemanticRetrieverSpec(
             weight=weight,
             model=str(config["model"]),
