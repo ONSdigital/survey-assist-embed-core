@@ -1,6 +1,6 @@
 """Tests for SAYT storage helper validation and artifact edge cases."""
 
-# pylint: disable=protected-access,too-few-public-methods,missing-function-docstring
+# pylint: disable=protected-access,too-few-public-methods,missing-function-docstring,no-member
 
 import json
 

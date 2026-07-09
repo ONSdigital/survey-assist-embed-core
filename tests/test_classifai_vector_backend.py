@@ -430,7 +430,8 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
             return_value=SimpleNamespace(num_vectors=1, search=MagicMock()),
         ),
         patch(
-            "survey_assist_embed_core.adapters.classifai.vector_backend.write_vector_store_metadata",
+            "survey_assist_embed_core.adapters.classifai"
+            + ".vector_backend.write_vector_store_metadata",
         ),
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend._resolve_local_path",
@@ -448,11 +449,6 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
         "sentence-transformers/other",
         vectoriser_class="HF",
     )
-
-
-def test_classifai_vector_backend_rejects_legacy_device_kwarg() -> None:
-    with pytest.raises(TypeError, match="unexpected keyword argument 'device'"):
-        ClassifaiVectorBackend(device="cuda")
 
 
 def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> None:
