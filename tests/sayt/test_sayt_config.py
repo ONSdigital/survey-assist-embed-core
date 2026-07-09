@@ -148,10 +148,10 @@ def test_semantic_retriever_spec_builds_semantic_retriever(monkeypatch):
     captured = {}
 
     class _StubSemanticRetriever:
-        def __init__(self, corpus_arg, *, model, vectorizer_class, min_chars):
+        def __init__(self, corpus_arg, *, model, vectoriser_class, min_chars):
             captured["corpus"] = corpus_arg
             captured["model"] = model
-            captured["vectorizer_class"] = vectorizer_class
+            captured["vectoriser_class"] = vectoriser_class
             captured["min_chars"] = min_chars
 
     monkeypatch.setattr(
@@ -167,21 +167,21 @@ def test_semantic_retriever_spec_builds_semantic_retriever(monkeypatch):
     assert captured == {
         "corpus": corpus,
         "model": "custom-model",
-        "vectorizer_class": None,
+        "vectoriser_class": None,
         "min_chars": 4,
     }
 
 
-def test_semantic_retriever_spec_passes_vectorizer_class_to_retriever(monkeypatch):
-    """Pass vectorizer_class through to semantic retriever construction."""
+def test_semantic_retriever_spec_passes_vectoriser_class_to_retriever(monkeypatch):
+    """Pass vectoriser_class through to semantic retriever construction."""
     corpus = CleanCorpus.model_validate([("car wash", "Car Wash")])
     captured = {}
 
     class _StubSemanticRetriever:
-        def __init__(self, corpus_arg, *, model, vectorizer_class, min_chars):
+        def __init__(self, corpus_arg, *, model, vectoriser_class, min_chars):
             captured["corpus"] = corpus_arg
             captured["model"] = model
-            captured["vectorizer_class"] = vectorizer_class
+            captured["vectoriser_class"] = vectoriser_class
             captured["min_chars"] = min_chars
 
     monkeypatch.setattr(
@@ -192,7 +192,7 @@ def test_semantic_retriever_spec_passes_vectorizer_class_to_retriever(monkeypatc
     spec = SemanticRetrieverSpec(
         model="custom-model",
         weight=2.0,
-        vectorizer_class="OnnxVectoriser",
+        vectoriser_class="OnnxVectoriser",
     )
 
     retriever = spec.build(corpus, min_chars=4)
@@ -201,6 +201,6 @@ def test_semantic_retriever_spec_passes_vectorizer_class_to_retriever(monkeypatc
     assert captured == {
         "corpus": corpus,
         "model": "custom-model",
-        "vectorizer_class": "OnnxVectoriser",
+        "vectoriser_class": "OnnxVectoriser",
         "min_chars": 4,
     }

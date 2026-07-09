@@ -21,7 +21,7 @@ from survey_assist_utils import get_logger
 
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
     resolve_model_name,
-    resolve_vectorizer_class,
+    resolve_vectoriser_class,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
     NormalisedHFVectoriser,
@@ -36,10 +36,10 @@ logger = get_logger(__name__)
 def _build_semantic_vectoriser(
     *,
     semantic_model: str,
-    vectorizer_class: str | None,
+    vectoriser_class: str | None,
 ) -> VectoriserBase:
     """Construct a semantic vectoriser from the requested class name."""
-    selected_class = resolve_vectorizer_class(vectorizer_class)
+    selected_class = resolve_vectoriser_class(vectoriser_class)
     if selected_class == "ONNX":
         return OnnxVectoriser(semantic_model)
     return NormalisedHFVectoriser(semantic_model)
@@ -335,7 +335,7 @@ def build_semantic_index(
     corpus: CleanCorpus,
     *,
     model: str,
-    vectorizer_class: str | None = None,
+    vectoriser_class: str | None = None,
     output_dir: str | os.PathLike[str] | None = None,
     overwrite: bool = True,
 ) -> DenseVectorIndex:
@@ -344,10 +344,8 @@ def build_semantic_index(
     Args:
         corpus: Cleaned corpus to index.
         model: Sentence-transformer model name without the repository prefix.
-        vectorizer_class: Optional semantic vectoriser class or alias to use.
-            Supported ONNX aliases are ``onnx``, ``OnnxVectoriser``, and
-            ``OnnxVectorizer``. Any other value falls back to the normalised
-            HuggingFace vectoriser.
+        vectoriser_class: Optional semantic vectoriser class to use ("ONNX" or "HF").
+            If not provided, the default ONNX vectoriser is used.
         output_dir: Optional persistent filespace directory for the generated
             vector store.
         overwrite: Whether to allow ClassifAI to replace an existing filespace
@@ -357,10 +355,10 @@ def build_semantic_index(
         A dense index using semantic embeddings.
     """
     semantic_model = resolve_model_name(model)
-    vectorizer_class = resolve_vectorizer_class(vectorizer_class)
+    vectoriser_class = resolve_vectoriser_class(vectoriser_class)
     semantic_vectoriser = _build_semantic_vectoriser(
         semantic_model=semantic_model,
-        vectorizer_class=vectorizer_class,
+        vectoriser_class=vectoriser_class,
     )
 
     return DenseVectorIndex.from_corpus(
@@ -375,15 +373,15 @@ def load_semantic_index(
     corpus: CleanCorpus,
     *,
     model: str,
-    vectorizer_class: str | None = None,
+    vectoriser_class: str | None = None,
     folder_path: str | os.PathLike[str],
 ) -> DenseVectorIndex:
     """Load a persisted dense index backed by semantic embeddings."""
     semantic_model = resolve_model_name(model)
-    vectorizer_class = resolve_vectorizer_class(vectorizer_class)
+    vectoriser_class = resolve_vectoriser_class(vectoriser_class)
     semantic_vectoriser = _build_semantic_vectoriser(
         semantic_model=semantic_model,
-        vectorizer_class=vectorizer_class,
+        vectoriser_class=vectoriser_class,
     )
 
     return DenseVectorIndex.from_filespace(

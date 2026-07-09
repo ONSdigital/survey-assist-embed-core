@@ -193,7 +193,7 @@ class SemanticRetriever(_DenseRetriever):
         corpus: CleanCorpus,
         *,
         model: str,
-        vectorizer_class: str | None = None,
+        vectoriser_class: str | None = None,
         min_chars: int,
     ) -> None:
         """Initialise a semantic retriever.
@@ -202,7 +202,7 @@ class SemanticRetriever(_DenseRetriever):
             corpus: Cleaned corpus to search.
             model: Sentence-transformer model name without the repository
                 prefix.
-            vectorizer_class: Optional semantic vectoriser class or alias.
+            vectoriser_class: Optional semantic vectoriser class or alias.
             min_chars: Minimum query length required before retrieval runs.
         """
         self._corpus = corpus
@@ -210,5 +210,5 @@ class SemanticRetriever(_DenseRetriever):
         self._index = build_semantic_index(
             corpus=corpus,
             model=model,
-            vectorizer_class=vectorizer_class,
+            vectoriser_class=vectoriser_class,
         )

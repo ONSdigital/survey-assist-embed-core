@@ -441,7 +441,7 @@ def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
     retriever = SemanticRetriever(
         corpus,
         model="all-MiniLM-L6-v2",
-        vectorizer_class="HF",
+        vectoriser_class="HF",
         min_chars=3,
     )
 
@@ -494,7 +494,7 @@ def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
     index = load_semantic_index(
         corpus,
         model="all-MiniLM-L6-v2",
-        vectorizer_class="HF",
+        vectoriser_class="HF",
         folder_path=folder_path,
     )
 

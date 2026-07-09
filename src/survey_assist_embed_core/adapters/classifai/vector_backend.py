@@ -59,7 +59,7 @@ def build_classifai_vector_store_artifacts(
             vector store.  If not provided, the default ONNX vectoriser is used.
     """
     embedding_model_name = resolve_model_name(embedding_model_name)
-    vectoriser_class = resolve_vectorizer_class(vectoriser_class)
+    vectoriser_class = resolve_vectoriser_class(vectoriser_class)
     logger.info(
         "Starting vector store artifact build",
         embedding_model_name=embedding_model_name,
@@ -195,7 +195,7 @@ class ClassifaiVectorBackend:
 
     def _set_vectoriser_class(self, vectoriser_class: str | None) -> None:
         """Update the effective vectoriser kind and clear any stale cache."""
-        vectoriser_class = resolve_vectorizer_class(vectoriser_class)
+        vectoriser_class = resolve_vectoriser_class(vectoriser_class)
         if self._vectoriser_class == vectoriser_class:
             return
 
@@ -224,7 +224,7 @@ def _build_vectoriser(
     vectoriser_class: str | None = None,
 ) -> VectoriserBase:
     """Construct a concrete vectoriser for the selected backend kind."""
-    if resolve_vectorizer_class(vectoriser_class) == "ONNX":
+    if resolve_vectoriser_class(vectoriser_class) == "ONNX":
         return OnnxVectoriser(model=embedding_model_name)
     return NormalisedHFVectoriser(model_name=embedding_model_name)
 
@@ -243,11 +243,11 @@ def resolve_model_name(name: str | None) -> str:
     return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"
 
 
-def resolve_vectorizer_class(vectorizer_class: str | None) -> str:
+def resolve_vectoriser_class(vectoriser_class: str | None) -> str:
     """Resolve requested vectoriser class into a concrete implementation name."""
-    if vectorizer_class is None:
+    if vectoriser_class is None:
         return _DEFAULT_VECTORIZER_CLASS
-    selected_class = str(vectorizer_class).strip()
+    selected_class = str(vectoriser_class).strip()
     normalised_class = (
         selected_class.casefold()
         .replace("_", "")
@@ -267,7 +267,7 @@ def resolve_vectorizer_class(vectorizer_class: str | None) -> str:
     }:
         return "HF"
 
-    raise ValueError("vectorizer_class must resolve to either 'ONNX' or 'HF'")
+    raise ValueError("vectoriser_class must resolve to either 'ONNX' or 'HF'")
 
 
 @contextmanager

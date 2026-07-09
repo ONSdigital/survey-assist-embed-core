@@ -333,14 +333,14 @@ def _deserialise_stored_retriever(payload: dict[str, object]) -> StoredRetriever
             max_df=_coerce_float(config["max_df"], field_name="max_df"),
         )
     elif retriever_type == "semantic":
-        vectorizer_class = config.get("vectorizer_class")
-        if vectorizer_class is None:
-            vectorizer_class = config.get("vectoriser_class")
+        vectoriser_class = config.get("vectoriser_class")
+        if vectoriser_class is None:
+            vectoriser_class = config.get("vectoriser_class")
         spec = SemanticRetrieverSpec(
             weight=weight,
             model=str(config["model"]),
-            vectorizer_class=(
-                None if vectorizer_class is None else str(vectorizer_class)
+            vectoriser_class=(
+                None if vectoriser_class is None else str(vectoriser_class)
             ),
         )
     else:

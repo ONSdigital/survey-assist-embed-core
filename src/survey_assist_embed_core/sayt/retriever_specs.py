@@ -242,7 +242,7 @@ class SemanticRetrieverSpec:
 
     weight: float = 1.0
     model: str = "all-MiniLM-L6-v2"
-    vectorizer_class: str | None = None
+    vectoriser_class: str | None = None
     name: str = field(init=False, default="semantic")
 
     def __post_init__(self) -> None:
@@ -276,14 +276,14 @@ class SemanticRetrieverSpec:
             return SemanticRetriever(
                 corpus,
                 model=self.model,
-                vectorizer_class=self.vectorizer_class,
+                vectoriser_class=self.vectoriser_class,
                 min_chars=min_chars,
             )
 
         index = build_semantic_index(
             corpus,
             model=self.model,
-            vectorizer_class=self.vectorizer_class,
+            vectoriser_class=self.vectoriser_class,
             output_dir=_require_filespace_path(filespace_path, spec_name=self.name),
             overwrite=overwrite,
         )
@@ -304,7 +304,7 @@ class SemanticRetrieverSpec:
         index = load_semantic_index(
             corpus,
             model=self.model,
-            vectorizer_class=self.vectorizer_class,
+            vectoriser_class=self.vectoriser_class,
             folder_path=_require_filespace_path(filespace_path, spec_name=self.name),
         )
         return SemanticRetriever.from_index(

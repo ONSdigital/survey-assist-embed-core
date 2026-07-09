@@ -19,7 +19,7 @@ from survey_assist_embed_core.adapters.classifai.vector_backend import (
     _ClassifaiVectorIndex,
     _resolve_local_path,
     resolve_model_name,
-    resolve_vectorizer_class,
+    resolve_vectoriser_class,
 )
 from survey_assist_embed_core.adapters.storage import DownloadedVectorStore
 
@@ -190,15 +190,15 @@ def test_classifai_normalise_model_name_prepends_prefix() -> None:
         ("normalized_hf_vectorizer", "HF"),
     ],
 )
-def test_resolve_vectorizer_class_accepts_aliases(raw_value: str, expected: str):
+def test_resolve_vectoriser_class_accepts_aliases(raw_value: str, expected: str):
     """Accept mixed-case and common alias forms for vectoriser class selection."""
-    assert resolve_vectorizer_class(raw_value) == expected
+    assert resolve_vectoriser_class(raw_value) == expected
 
 
-def test_resolve_vectorizer_class_rejects_unknown_alias() -> None:
+def test_resolve_vectoriser_class_rejects_unknown_alias() -> None:
     """Reject unsupported class names after alias normalisation."""
     with pytest.raises(ValueError, match="must resolve to either 'ONNX' or 'HF'"):
-        resolve_vectorizer_class("bert")
+        resolve_vectoriser_class("bert")
 
 
 def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(

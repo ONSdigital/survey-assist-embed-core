@@ -485,7 +485,7 @@ def test_embedding_handler_constructs_default_backend_without_legacy_device(
     mock_backend_cls.assert_called_once_with()
 
 
-def test_normalised_hf_vectoriser_normalize_unit_vectors() -> None:
+def test_normalised_hf_vectoriser_normalise_unit_vectors() -> None:
     vectors = np.array([[3.0, 4.0], [1.0, 0.0]])
     result = vectoriser_module.normalise_vectors(vectors)
 
