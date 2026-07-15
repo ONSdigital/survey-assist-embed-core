@@ -62,11 +62,12 @@ def build_classifai_vector_store_artifacts(
             file_name=local_file,
             data_type="csv",
             vectoriser=vectoriser,
-            batch_size=8,
+            batch_size=128,
             meta_data=None,
             output_dir=output_dir,
             overwrite=True,
             hooks=None,
+            quiet_mode=True,
         )
 
     write_vector_store_metadata(
@@ -168,6 +169,7 @@ class ClassifaiVectorBackend:
             folder_path=folder_path,
             vectoriser=vectoriser,
             hooks=None,
+            quiet_mode=True,
         )
         index_source_file = read_index_source_file(folder_path=folder_path)
         return _ClassifaiVectorIndex(store), index_source_file

@@ -96,6 +96,7 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
         folder_path=folder_path,
         vectoriser=vectoriser,
         hooks=None,
+        quiet_mode=True,
     )
 
 
@@ -139,11 +140,12 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         file_name="source.csv",
         data_type="csv",
         vectoriser=vectoriser,
-        batch_size=8,
+        batch_size=128,
         meta_data=None,
         output_dir="vector_store",
         overwrite=True,
         hooks=None,
+        quiet_mode=True,
     )
     mock_write_vector_store_metadata.assert_called_once_with(
         folder_path="vector_store",

@@ -264,7 +264,9 @@ def test_dense_vector_index_builds_persistent_filespace(
             batch_size,
             output_dir,
             overwrite,
+            skip_save,
             hooks,
+            quiet_mode,
         ):
             captured["file_name"] = file_name
             captured["data_type"] = data_type
@@ -272,7 +274,9 @@ def test_dense_vector_index_builds_persistent_filespace(
             captured["batch_size"] = batch_size
             captured["output_dir"] = output_dir
             captured["overwrite"] = overwrite
+            captured["skip_save"] = skip_save
             captured["hooks"] = hooks
+            captured["quiet_mode"] = quiet_mode
             output_path = Path(output_dir)
             if output_path.is_dir() and overwrite:
                 shutil.rmtree(output_path)
@@ -301,10 +305,12 @@ def test_dense_vector_index_builds_persistent_filespace(
     assert Path(captured["file_name"]).parent != output_dir
     assert captured["data_type"] == "csv"
     assert captured["vectoriser_type"] == "_StubVectoriser"
-    assert captured["batch_size"] == 64
+    assert captured["batch_size"] == 128
     assert captured["output_dir"] == str(output_dir)
     assert captured["overwrite"] is True
+    assert captured["skip_save"] is False
     assert captured["hooks"] is None
+    assert captured["quiet_mode"] is True
     assert captured["rows"] == [
         {"label": display_text, "text": search_text}
         for search_text, display_text in corpus.rows
@@ -338,10 +344,11 @@ def test_dense_vector_index_loads_existing_filespace(
     class _StubLoadedVectorStore:
         num_vectors = 7
 
-    def _fake_from_filespace(*, folder_path, vectoriser, hooks):
+    def _fake_from_filespace(*, folder_path, vectoriser, hooks, quiet_mode):
         captured["folder_path"] = folder_path
         captured["vectoriser_type"] = type(vectoriser).__name__
         captured["hooks"] = hooks
+        captured["quiet_mode"] = quiet_mode
         return _StubLoadedVectorStore()
 
     monkeypatch.setattr(
@@ -362,6 +369,7 @@ def test_dense_vector_index_loads_existing_filespace(
         "folder_path": str(folder_path),
         "vectoriser_type": "_StubVectoriser",
         "hooks": None,
+        "quiet_mode": True,
     }
 
 

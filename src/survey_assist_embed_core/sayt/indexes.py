@@ -6,12 +6,10 @@ import csv
 import os
 import tempfile
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-import classifai.indexers.main as classifai_indexers_main
 import numpy as np
 from classifai.indexers import VectorStore, VectorStoreSearchInput
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
@@ -22,22 +20,6 @@ from survey_assist_utils import get_logger
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
 logger = get_logger(__name__)
-
-
-def _silent_tqdm(iterable, **_kwargs):
-    """Pass through iterables unchanged to suppress ClassifAI progress bars."""
-    return iterable
-
-
-@contextmanager
-def _silence_classifai_tqdm():
-    """Temporarily replace ClassifAI's tqdm import with a no-op wrapper."""
-    previous_tqdm = classifai_indexers_main.tqdm
-    classifai_indexers_main.tqdm = _silent_tqdm
-    try:
-        yield
-    finally:
-        classifai_indexers_main.tqdm = previous_tqdm
 
 
 def _derive_num_retrieved_based_on_duplication(
@@ -110,16 +92,17 @@ class DenseVectorIndex:
 
             cls._write_corpus_csv(corpus, csv_path)
 
-            with _silence_classifai_tqdm():
-                vector_store = VectorStore(
-                    file_name=csv_path,
-                    data_type="csv",
-                    vectoriser=vectoriser,
-                    batch_size=64,
-                    output_dir=classifai_output_dir,
-                    overwrite=overwrite,
-                    hooks=None,
-                )
+            vector_store = VectorStore(
+                file_name=csv_path,
+                data_type="csv",
+                vectoriser=vectoriser,
+                batch_size=128,
+                output_dir=classifai_output_dir,
+                overwrite=overwrite,
+                skip_save=output_dir is None,
+                hooks=None,
+                quiet_mode=True,
+            )
 
         return cls(
             _vector_store=vector_store,
@@ -147,12 +130,12 @@ class DenseVectorIndex:
         Returns:
             A ``DenseVectorIndex`` backed by a loaded ``VectorStore``.
         """
-        with _silence_classifai_tqdm():
-            vector_store = VectorStore.from_filespace(
-                folder_path=os.fspath(folder_path),
-                vectoriser=vectoriser,
-                hooks=None,
-            )
+        vector_store = VectorStore.from_filespace(
+            folder_path=os.fspath(folder_path),
+            vectoriser=vectoriser,
+            hooks=None,
+            quiet_mode=True,
+        )
 
         return cls(
             _vector_store=vector_store,
@@ -208,8 +191,7 @@ class DenseVectorIndex:
         )
 
         while True:
-            with _silence_classifai_tqdm():
-                results = self._vector_store.search(search_input, n_results=num_results)
+            results = self._vector_store.search(search_input, n_results=num_results)
 
             labels = results["doc_label"].tolist()
             scores = results["score"].tolist()

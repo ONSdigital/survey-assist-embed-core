@@ -162,7 +162,9 @@ def test_builder_writes_ngram_filespace(monkeypatch, tmp_path, small_corpus):
             batch_size,
             output_dir,
             overwrite,
+            skip_save,
             hooks,
+            quiet_mode,
         ):
             captured["file_name"] = file_name
             captured["data_type"] = data_type
@@ -170,7 +172,9 @@ def test_builder_writes_ngram_filespace(monkeypatch, tmp_path, small_corpus):
             captured["batch_size"] = batch_size
             captured["output_dir"] = output_dir
             captured["overwrite"] = overwrite
+            captured["skip_save"] = skip_save
             captured["hooks"] = hooks
+            captured["quiet_mode"] = quiet_mode
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             Path(output_dir, "metadata.json").write_text("{}", encoding="utf-8")
             Path(output_dir, "vectors.parquet").write_text("dummy", encoding="utf-8")
@@ -191,6 +195,8 @@ def test_builder_writes_ngram_filespace(monkeypatch, tmp_path, small_corpus):
     filespace_path = artifact_dir / manifest["retrievers"][0]["path"]
 
     assert Path(captured["output_dir"]).name == filespace_path.name
+    assert captured["skip_save"] is False
+    assert captured["quiet_mode"] is True
     assert (filespace_path / "metadata.json").exists()
     assert (filespace_path / "vectors.parquet").exists()
 
@@ -214,19 +220,31 @@ def test_from_artifact_loads_persisted_ngram_filespace(
             batch_size,
             output_dir,
             overwrite,
+            skip_save,
             hooks,
+            quiet_mode,
         ):
-            _ = (file_name, data_type, vectoriser, batch_size, overwrite, hooks)
+            _ = (
+                file_name,
+                data_type,
+                vectoriser,
+                batch_size,
+                overwrite,
+                skip_save,
+                hooks,
+                quiet_mode,
+            )
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             Path(output_dir, "metadata.json").write_text("{}", encoding="utf-8")
             Path(output_dir, "vectors.parquet").write_text("dummy", encoding="utf-8")
             self.num_vectors = 1
 
         @classmethod
-        def from_filespace(cls, *, folder_path, vectoriser, hooks):
+        def from_filespace(cls, *, folder_path, vectoriser, hooks, quiet_mode):
             captured["folder_path"] = folder_path
             captured["vectoriser_type"] = type(vectoriser).__name__
             captured["hooks"] = hooks
+            captured["quiet_mode"] = quiet_mode
             return _StubLoadedVectorStore()
 
     class _StubSearchResults:
@@ -265,6 +283,7 @@ def test_from_artifact_loads_persisted_ngram_filespace(
         "folder_path": str(artifact_dir / manifest["retrievers"][0]["path"]),
         "vectoriser_type": "_CharNgramVectoriser",
         "hooks": None,
+        "quiet_mode": True,
         "n_results": 1,
     }
 
