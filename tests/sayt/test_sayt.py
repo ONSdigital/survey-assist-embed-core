@@ -34,7 +34,10 @@ def test_constructor_rejects_unknown_kwargs(small_corpus):
 def test_empty_corpus_after_filtering_raises():
     """Raise when corpus normalisation removes every input row."""
     corpus = [None, " ", "-9", ("-9", "ignored")]
-    with pytest.raises(ValueError, match="corpus is empty"):
+    with (
+        pytest.warns(UserWarning, match="Skipping empty or invalid corpus item"),
+        pytest.raises(ValueError, match="corpus is empty"),
+    ):
         SAYTSuggester(corpus)
 
 

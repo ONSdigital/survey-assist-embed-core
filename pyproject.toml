@@ -111,6 +111,9 @@ fail_under = 80
 
 [tool.pytest.ini_options]
 markers = ["utils: mark a test as a utils test"]
+filterwarnings = [
+    "ignore:the argument `dtypes` for `read_csv` is deprecated.*:DeprecationWarning",
+]
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s - %(levelname)s - %(message)s"

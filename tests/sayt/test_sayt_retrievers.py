@@ -17,6 +17,7 @@ from survey_assist_embed_core.sayt.core import CleanCorpus
 from survey_assist_embed_core.sayt.indexes import (
     DenseVectorIndex,
     _CharNgramVectoriser,
+    _derive_num_retrieved_based_on_duplication,
     _L2NormalisingVectoriser,
     load_semantic_index,
 )
@@ -24,6 +25,8 @@ from survey_assist_embed_core.sayt.retrievers import (
     NgramRetriever,
     PrefixRetriever,
     SemanticRetriever,
+    _lookup_prefix,
+    _PrefixTrieNode,
 )
 from survey_assist_embed_core.sayt.suggester import SAYTSuggester
 
@@ -136,6 +139,17 @@ def test_prefix_retriever_handles_empty_prefix_candidates(small_corpus):
     results = retriever.suggest_with_scores("", num_suggestions=5)
 
     assert results == []
+
+
+def test_lookup_prefix_returns_empty_when_prefix_path_ends_missing() -> None:
+    """Return no matches when the final trie step resolves to no child node."""
+    assert _lookup_prefix(_PrefixTrieNode(), "z") == set()
+
+
+def test_dense_candidate_derivation_returns_zero_for_invalid_inputs() -> None:
+    """Return zero candidates when no suggestions or corpus rows are available."""
+    assert _derive_num_retrieved_based_on_duplication(0, 3, 10) == 0
+    assert _derive_num_retrieved_based_on_duplication(5, 3, 0) == 0
 
 
 def test_prefix_retriever_keeps_ties_at_cutoff():
