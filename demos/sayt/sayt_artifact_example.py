@@ -83,7 +83,14 @@ for query in ["car", "cars", "waxi", "grom", "wash", "duplicate", "auto"]:
     print("searching for:", query)
     print("live", "->", live_suggestions)
     print("loaded", "->", loaded_suggestions)
-    print("loaded_scores", "->", loaded_suggester.suggest_with_scores(query, 5))
+    print(
+        "loaded_scores",
+        "->",
+        [
+            suggestion.model_dump()
+            for suggestion in loaded_suggester.suggest_with_scores(query, 5)
+        ],
+    )
     if live_suggestions != loaded_suggestions:
         raise RuntimeError("Loaded suggester results did not match live build")
     print()
