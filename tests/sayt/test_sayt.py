@@ -483,6 +483,16 @@ def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
     assert [result.display_text for result in results] == [suggester._corpus.rows[0][1]]
 
 
+def test_suggestion_model_dump_is_api_friendly() -> None:
+    """Expose a simple serialisable payload for endpoint responses."""
+    suggestion = Suggestion(display_text="Car Wash", score=0.75)
+
+    assert suggestion.model_dump() == {
+        "display_text": "Car Wash",
+        "score": 0.75,
+    }
+
+
 def test_combine_suggestions_ignores_non_positive_score_groups(small_corpus):
     """Drop a retriever group entirely when its max score is not positive."""
     suggester = SAYTSuggester(
