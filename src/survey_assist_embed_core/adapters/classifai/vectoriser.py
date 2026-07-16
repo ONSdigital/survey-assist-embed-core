@@ -6,7 +6,7 @@ from threading import Lock
 
 import numpy as np
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
-from light_embed import TextEmbedding
+from fastembed import TextEmbedding
 
 _ONNX_MODEL_CACHE: dict[tuple[str, str | None], TextEmbedding] = {}
 _ONNX_MODEL_CACHE_LOCK = Lock()
@@ -72,14 +72,14 @@ def _get_cached_onnx_model(model: str, *, device: str | None = None) -> TextEmbe
     with _ONNX_MODEL_CACHE_LOCK:
         cached_model = _ONNX_MODEL_CACHE.get(cache_key)
         if cached_model is None:
-            cached_model = TextEmbedding(model_name_or_path=model, device=device)
+            cached_model = TextEmbedding(model_name=model)
             _ONNX_MODEL_CACHE[cache_key] = cached_model
 
     return cached_model
 
 
 class OnnxVectoriser(VectoriserBase):
-    """Sentence embedding vectoriser using light_embed with ONNX backend.
+    """Sentence embedding vectoriser using fastembed ONNX backend.
 
     Supports both HuggingFace model names and local paths. The model is cached
     at module level so initialization only happens once per process.
@@ -97,7 +97,7 @@ class OnnxVectoriser(VectoriserBase):
         if isinstance(texts, str):
             texts = [texts]
 
-        vectors = np.asarray(list(self.model.encode(texts)), dtype=np.float32)
+        vectors = np.asarray(list(self.model.embed(texts)), dtype=np.float32)
         if vectors.ndim == 1:
             vectors = vectors.reshape(1, -1)
 

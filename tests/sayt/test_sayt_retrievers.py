@@ -169,10 +169,10 @@ def test_onnx_vectoriser_handles_one_dimensional_output(monkeypatch):
     """Normalise a single returned embedding into a 2D unit vector."""
 
     class _StubTextEmbedding:
-        def __init__(self, model_name_or_path, device=None):
-            _ = (model_name_or_path, device)
+        def __init__(self, model_name, **kwargs):
+            _ = model_name
 
-        def encode(self, texts):
+        def embed(self, texts):
             _ = texts
             return [np.array([3.0, 4.0], dtype=np.float32)]
 
@@ -202,11 +202,10 @@ def test_onnx_vectoriser_reuses_cached_text_embedding(monkeypatch):
     captured = []
 
     class _StubTextEmbedding:
-        def __init__(self, model_name_or_path, device=None):
-            captured.append(model_name_or_path)
-            _ = device
+        def __init__(self, model_name, **kwargs):
+            captured.append(model_name)
 
-        def encode(self, texts):
+        def embed(self, texts):
             _ = texts
             return [np.array([1.0, 0.0], dtype=np.float32)]
 
