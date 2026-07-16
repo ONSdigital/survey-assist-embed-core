@@ -15,6 +15,7 @@ from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
     read_embedding_model_name,
     read_index_source_file,
+    read_vectoriser_class,
     write_vector_store_metadata,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
@@ -60,9 +61,12 @@ def build_classifai_vector_store_artifacts(
             vector store.
     """
     embedding_model_name = resolve_model_name(embedding_model_name)
+    vectoriser_class = VectoriserClass.resolve(vectoriser_class)
     logger.info(
         "Starting vector store artifact build",
         embedding_model_name=embedding_model_name,
+        vectoriser_class=vectoriser_class.value,
+        index_source_file=index_source_file,
         output_dir=output_dir,
     )
     with _resolve_local_path(index_source_file) as local_file:
@@ -85,6 +89,7 @@ def build_classifai_vector_store_artifacts(
         folder_path=output_dir,
         index_source_file=index_source_file,
         embedding_model_name=embedding_model_name,
+        vectoriser_class=vectoriser_class.value,
     )
     logger.info(
         "Vector store artifacts built successfully",
@@ -169,7 +174,8 @@ class ClassifaiVectorBackend:
             folder_path: Local folder containing the persisted vector-store
                 artifacts.
             vectoriser_class: Optional vectoriser kind to use for the loaded
-                vector store.  If not provided, the default ONNX vectoriser is used.
+                vector store.  If not provided, the vectoriser class is read
+                from persisted metadata and if absent the default ONNX is used.
 
         Returns:
             A tuple of the loaded vector index and the recorded source-file
@@ -178,14 +184,9 @@ class ClassifaiVectorBackend:
         ensure_persisted_vector_store(folder_path=folder_path)
         embedding_model_name = read_embedding_model_name(folder_path=folder_path)
         self._set_embedding_model_name(embedding_model_name)
-        if embedding_model_name is None:
-            logger.warning(
-                "No embedding model metadata found in persisted vector store. Using default model.",
-                folder_path=folder_path,
-                resolved_model_name=self._embedding_model_name,
-            )
+        vectoriser_class_stored = read_vectoriser_class(folder_path=folder_path)
+        self._set_vectoriser_class(vectoriser_class, vectoriser_class_stored)
 
-        self._set_vectoriser_class(vectoriser_class)
         vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
             folder_path=folder_path,
@@ -199,6 +200,11 @@ class ClassifaiVectorBackend:
     def _set_embedding_model_name(self, embedding_model_name: str | None) -> None:
         """Update the effective embedding model and clear any stale cache."""
         resolved_name = resolve_model_name(embedding_model_name)
+        if embedding_model_name is None:
+            logger.warning(
+                "No embedding model metadata found in persisted vector store. Using default model.",
+                resolved_model_name=resolved_name,
+            )
         if self._embedding_model_name == resolved_name:
             return
 
@@ -206,10 +212,26 @@ class ClassifaiVectorBackend:
         self._vectoriser = None
 
     def _set_vectoriser_class(
-        self, vectoriser_class: VectoriserClassLike = None
+        self,
+        vectoriser_class: VectoriserClassLike = None,
+        vectoriser_class_stored: VectoriserClassLike = None,
     ) -> None:
         """Update the effective vectoriser class and clear any stale cache."""
-        resolved_class = VectoriserClass.resolve(vectoriser_class)
+        resolved_class = (
+            VectoriserClass.resolve(vectoriser_class_stored)
+            if vectoriser_class is None
+            else VectoriserClass.resolve(vectoriser_class)
+        )
+        if vectoriser_class_stored is not None and vectoriser_class is not None:
+            stored_class = VectoriserClass.resolve(vectoriser_class_stored)
+            if resolved_class != stored_class:
+                logger.warning(
+                    "Vectoriser class provided does not match persisted metadata."
+                    "Using provided class.",
+                    provided_class=resolved_class.value,
+                    persisted_class=stored_class.value,
+                )
+
         if self._vectoriser_class == resolved_class:
             return
 

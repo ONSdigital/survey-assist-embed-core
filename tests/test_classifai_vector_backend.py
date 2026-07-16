@@ -140,7 +140,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
 
     mock_build_vectoriser.assert_called_once_with(
         "sentence-transformers/other",
-        vectoriser_class=None,
+        vectoriser_class=VectoriserClass.ONNX,
     )
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
@@ -157,6 +157,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         folder_path="vector_store",
         index_source_file="source.csv",
         embedding_model_name="sentence-transformers/other",
+        vectoriser_class="onnx",
     )
 
 
@@ -493,7 +494,7 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
 
     mock_build_vectoriser.assert_called_once_with(
         "sentence-transformers/other",
-        vectoriser_class="HF",
+        vectoriser_class=VectoriserClass.HUGGINGFACE,
     )
 
 
@@ -611,6 +612,5 @@ def test_classifai_vector_backend_load_requires_embedding_model_metadata(
     }
     mock_warning.assert_called_once_with(
         "No embedding model metadata found in persisted vector store. Using default model.",
-        folder_path=folder_path,
         resolved_model_name="sentence-transformers/all-MiniLM-L6-v2",
     )
