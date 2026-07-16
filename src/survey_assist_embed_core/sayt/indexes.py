@@ -21,28 +21,14 @@ from survey_assist_utils import get_logger
 
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
     resolve_model_name,
-    resolve_vectoriser_class,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
-    NormalisedHFVectoriser,
-    OnnxVectoriser,
+    build_vectoriser,
     normalise_vectors,
 )
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
 logger = get_logger(__name__)
-
-
-def _build_semantic_vectoriser(
-    *,
-    semantic_model: str,
-    vectoriser_class: str | None,
-) -> VectoriserBase:
-    """Construct a semantic vectoriser from the requested class name."""
-    selected_class = resolve_vectoriser_class(vectoriser_class)
-    if selected_class == "ONNX":
-        return OnnxVectoriser(semantic_model)
-    return NormalisedHFVectoriser(semantic_model)
 
 
 def _silent_tqdm(iterable, **_kwargs):
@@ -355,9 +341,8 @@ def build_semantic_index(
         A dense index using semantic embeddings.
     """
     semantic_model = resolve_model_name(model)
-    vectoriser_class = resolve_vectoriser_class(vectoriser_class)
-    semantic_vectoriser = _build_semantic_vectoriser(
-        semantic_model=semantic_model,
+    semantic_vectoriser = build_vectoriser(
+        embedding_model_name=semantic_model,
         vectoriser_class=vectoriser_class,
     )
 
@@ -378,9 +363,8 @@ def load_semantic_index(
 ) -> DenseVectorIndex:
     """Load a persisted dense index backed by semantic embeddings."""
     semantic_model = resolve_model_name(model)
-    vectoriser_class = resolve_vectoriser_class(vectoriser_class)
-    semantic_vectoriser = _build_semantic_vectoriser(
-        semantic_model=semantic_model,
+    semantic_vectoriser = build_vectoriser(
+        embedding_model_name=semantic_model,
         vectoriser_class=vectoriser_class,
     )
 

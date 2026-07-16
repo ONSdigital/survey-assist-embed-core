@@ -1,29 +1,79 @@
 """ClassifAI vectoriser helpers for retrieval backends."""
 
 # pylint: disable=too-few-public-methods
-
+from enum import StrEnum
 from threading import Lock
 
 import numpy as np
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
 from light_embed import TextEmbedding
 
-_onnx_model_cache: dict[tuple[str, str | None], TextEmbedding] = {}
-_onnx_model_cache_lock = Lock()
+_ONNX_MODEL_CACHE: dict[tuple[str, str | None], TextEmbedding] = {}
+_ONNX_MODEL_CACHE_LOCK = Lock()
+
+type VectoriserClassLike = str | VectoriserClass | None
+
+
+class VectoriserClass(StrEnum):
+    """Canonical selector values for supported semantic vectorisers."""
+
+    ONNX = "onnx"
+    HUGGINGFACE = "huggingface"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "VectoriserClass | None":
+        """Accept common alias spellings for vectoriser selection."""
+        if not isinstance(value, str):
+            return None
+        normalised_class = (
+            value.strip()
+            .casefold()
+            .replace("_", "")
+            .replace("-", "")
+            .removesuffix("vectoriser")
+            .removesuffix("vectorizer")
+        )
+        if normalised_class == "onnx":
+            return cls.ONNX
+        if normalised_class in {
+            "hf",
+            "huggingface",
+            "normalisedhf",
+            "normalizedhf",
+        }:
+            return cls.HUGGINGFACE
+        return None
+
+    @classmethod
+    def resolve(cls, value: VectoriserClassLike) -> "VectoriserClass":
+        """Resolve optional loose caller input into a canonical enum value."""
+        if value is None:
+            return _DEFAULT_VECTORIZER_CLASS
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(value)
+        except ValueError as exc:
+            raise ValueError(
+                "vectoriser_class must resolve to either 'onnx' or 'huggingface'"
+            ) from exc
+
+
+_DEFAULT_VECTORIZER_CLASS = VectoriserClass.ONNX
 
 
 def _get_cached_onnx_model(model: str, *, device: str | None = None) -> TextEmbedding:
     """Return a process-local cached ONNX embedding model."""
     cache_key = (model, device)
-    cached_model = _onnx_model_cache.get(cache_key)
+    cached_model = _ONNX_MODEL_CACHE.get(cache_key)
     if cached_model is not None:
         return cached_model
 
-    with _onnx_model_cache_lock:
-        cached_model = _onnx_model_cache.get(cache_key)
+    with _ONNX_MODEL_CACHE_LOCK:
+        cached_model = _ONNX_MODEL_CACHE.get(cache_key)
         if cached_model is None:
             cached_model = TextEmbedding(model_name_or_path=model, device=device)
-            _onnx_model_cache[cache_key] = cached_model
+            _ONNX_MODEL_CACHE[cache_key] = cached_model
 
     return cached_model
 
@@ -82,3 +132,14 @@ class NormalisedHFVectoriser(HuggingFaceVectoriser):
 
         vectors = super().transform(texts)
         return normalise_vectors(vectors)
+
+
+def build_vectoriser(
+    embedding_model_name: str,
+    *,
+    vectoriser_class: VectoriserClassLike = None,
+) -> VectoriserBase:
+    """Construct a concrete vectoriser for the selected backend kind."""
+    if VectoriserClass.resolve(vectoriser_class) == VectoriserClass.ONNX:
+        return OnnxVectoriser(model=embedding_model_name)
+    return NormalisedHFVectoriser(model_name=embedding_model_name)

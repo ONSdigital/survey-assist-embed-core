@@ -17,7 +17,6 @@ from survey_assist_embed_core.sayt import NgramRetrieverSpec, PrefixRetrieverSpe
 from survey_assist_embed_core.sayt.core import CleanCorpus
 from survey_assist_embed_core.sayt.indexes import (
     DenseVectorIndex,
-    OnnxVectoriser,
     _CharNgramVectoriser,
     load_semantic_index,
 )
@@ -163,10 +162,12 @@ def test_onnx_vectoriser_handles_one_dimensional_output(monkeypatch):
             _ = texts
             return [np.array([3.0, 4.0], dtype=np.float32)]
 
-    vectoriser_module._onnx_model_cache.clear()
+    vectoriser_module._ONNX_MODEL_CACHE.clear()
     monkeypatch.setattr(vectoriser_module, "TextEmbedding", _StubTextEmbedding)
 
-    vectoriser = OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
+    vectoriser = vectoriser_module.OnnxVectoriser(
+        "sentence-transformers/all-MiniLM-L6-v2"
+    )
 
     vectors = vectoriser.transform("query")
 
@@ -195,11 +196,11 @@ def test_onnx_vectoriser_reuses_cached_text_embedding(monkeypatch):
             _ = texts
             return [np.array([1.0, 0.0], dtype=np.float32)]
 
-    vectoriser_module._onnx_model_cache.clear()
+    vectoriser_module._ONNX_MODEL_CACHE.clear()
     monkeypatch.setattr(vectoriser_module, "TextEmbedding", _StubTextEmbedding)
 
-    first = OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
-    second = OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
+    first = vectoriser_module.OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
+    second = vectoriser_module.OnnxVectoriser("sentence-transformers/all-MiniLM-L6-v2")
 
     assert captured == ["sentence-transformers/all-MiniLM-L6-v2"]
     assert first.model is second.model
@@ -400,18 +401,23 @@ def test_dense_vector_index_loads_existing_filespace(
 def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
     monkeypatch, small_corpus
 ):
-    """Wrap the base embedding vectoriser before building the dense index."""
+    """Use the vectoriser factory before building the dense index."""
     captured = {}
     corpus = CleanCorpus.model_validate(small_corpus)
 
-    class _StubNormalisedHFVectoriser:
-        def __init__(self, model_name, device=None):
-            captured["model_name"] = model_name
-            captured["device"] = device
-
+    class _StubSemanticVectoriser:
         def transform(self, texts):
             _ = texts
             return np.array([[1.0, 0.0]])
+
+    def _fake_build_vectoriser(*, embedding_model_name, vectoriser_class=None):
+        captured["model_name"] = embedding_model_name
+        captured["vectoriser_class"] = getattr(
+            vectoriser_class,
+            "value",
+            vectoriser_class,
+        )
+        return _StubSemanticVectoriser()
 
     def _fake_build_dense_vector_index(
         *,
@@ -430,8 +436,8 @@ def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
         )
 
     monkeypatch.setattr(
-        "survey_assist_embed_core.sayt.indexes.NormalisedHFVectoriser",
-        _StubNormalisedHFVectoriser,
+        "survey_assist_embed_core.sayt.indexes.build_vectoriser",
+        _fake_build_vectoriser,
     )
     monkeypatch.setattr(
         "survey_assist_embed_core.sayt.indexes.DenseVectorIndex.from_corpus",
@@ -447,8 +453,8 @@ def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
 
     assert captured == {
         "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-        "device": None,
-        "vectoriser_type": "_StubNormalisedHFVectoriser",
+        "vectoriser_class": "HF",
+        "vectoriser_type": "_StubSemanticVectoriser",
         "output_dir": None,
         "overwrite": True,
     }
@@ -458,19 +464,24 @@ def test_semantic_retriever_builds_index_with_wrapped_vectoriser(
 def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
     monkeypatch, tmp_path, small_corpus
 ):
-    """Wrap the embedding vectoriser before loading a persisted semantic index."""
+    """Use the vectoriser factory before loading a persisted semantic index."""
     captured = {}
     corpus = CleanCorpus.model_validate(small_corpus)
     folder_path = tmp_path / "existing-semantic"
 
-    class _StubNormalisedHFVectoriser:
-        def __init__(self, model_name, device=None):
-            captured["model_name"] = model_name
-            captured["device"] = device
-
+    class _StubSemanticVectoriser:
         def transform(self, texts):
             _ = texts
             return np.array([[1.0, 0.0]])
+
+    def _fake_build_vectoriser(*, embedding_model_name, vectoriser_class=None):
+        captured["model_name"] = embedding_model_name
+        captured["vectoriser_class"] = getattr(
+            vectoriser_class,
+            "value",
+            vectoriser_class,
+        )
+        return _StubSemanticVectoriser()
 
     def _fake_load_dense_vector_index(*, corpus, folder_path, vectoriser):
         captured["corpus"] = corpus
@@ -483,8 +494,8 @@ def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
         )
 
     monkeypatch.setattr(
-        "survey_assist_embed_core.sayt.indexes.NormalisedHFVectoriser",
-        _StubNormalisedHFVectoriser,
+        "survey_assist_embed_core.sayt.indexes.build_vectoriser",
+        _fake_build_vectoriser,
     )
     monkeypatch.setattr(
         "survey_assist_embed_core.sayt.indexes.DenseVectorIndex.from_filespace",
@@ -501,10 +512,10 @@ def test_load_semantic_index_loads_existing_filespace_with_wrapped_vectoriser(
     assert index._num_vectors == 2
     assert captured == {
         "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-        "device": None,
+        "vectoriser_class": "HF",
         "corpus": corpus,
         "folder_path": folder_path,
-        "vectoriser_type": "_StubNormalisedHFVectoriser",
+        "vectoriser_type": "_StubSemanticVectoriser",
     }
 
 

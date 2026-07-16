@@ -466,7 +466,7 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     assert cfg.backend.backend_name == "classifai"
     assert cfg.backend.settings == {
         "embedding_model_name": "sentence-transformers/other",
-        "vectoriser_class": "ONNX",
+        "vectoriser_class": "onnx",
     }
 
 
