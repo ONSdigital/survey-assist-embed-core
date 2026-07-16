@@ -137,7 +137,6 @@ class ClassifaiVectorBackend:
     def __init__(self):
         """Initialise an unloaded backend waiting for persisted metadata."""
         self._embedding_model_name: str | None = None
-        self._vectoriser_class: str | None = None
         self._vectoriser: VectoriserBase | None = None
 
     @property
@@ -180,9 +179,8 @@ class ClassifaiVectorBackend:
             )
 
         self._set_embedding_model_name(embedding_model_name)
-        self._vectoriser_class = resolve_vectoriser_class(vectoriser_class)
 
-        vectoriser = self._get_vectoriser()
+        vectoriser = self._get_vectoriser(vectoriser_class=vectoriser_class)
         store = VectorStore.from_filespace(
             folder_path=folder_path,
             vectoriser=vectoriser,
@@ -199,7 +197,7 @@ class ClassifaiVectorBackend:
         self._embedding_model_name = embedding_model_name
         self._vectoriser = None
 
-    def _get_vectoriser(self) -> VectoriserBase:
+    def _get_vectoriser(self, vectoriser_class: str | None = None) -> VectoriserBase:
         """Build and cache the default ClassifAI vectoriser."""
         vectoriser = self._vectoriser
         if vectoriser is None:
@@ -208,8 +206,9 @@ class ClassifaiVectorBackend:
                     "embedding_model_name must be loaded from persisted metadata "
                     "before constructing a query vectoriser."
                 )
+            resolved_vectoriser_class = resolve_vectoriser_class(vectoriser_class)
             vectoriser = _build_vectoriser(
-                self._embedding_model_name, vectoriser_class=self._vectoriser_class
+                self._embedding_model_name, vectoriser_class=resolved_vectoriser_class
             )
             self._vectoriser = vectoriser
         return vectoriser

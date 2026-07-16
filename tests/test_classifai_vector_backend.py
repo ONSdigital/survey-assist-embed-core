@@ -83,7 +83,7 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
     assert index.num_vectors == EXPECTED_LOADED_VECTOR_COUNT
     assert index_source_file == "source.csv"
     assert backend.config.settings == {"embedding_model_name": "persisted-model"}
-    mock_build_vectoriser.assert_called_once_with()
+    mock_build_vectoriser.assert_called_once_with(vectoriser_class=None)
     mock_ensure_store.assert_called_once_with(
         folder_path=folder_path,
     )
@@ -413,7 +413,7 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
     assert second is fake_vectoriser
     mock_vectoriser.assert_called_once_with(
         "other",
-        vectoriser_class=backend._vectoriser_class,
+        vectoriser_class="ONNX",
     )
 
 
@@ -454,13 +454,12 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
 def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> None:
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
-    backend._vectoriser_class = "HF"
 
     with patch(
         "survey_assist_embed_core.adapters.classifai.vector_backend._build_vectoriser",
         return_value=object(),
     ) as mock_vectoriser:
-        backend._get_vectoriser()
+        backend._get_vectoriser(vectoriser_class="HF")
 
     mock_vectoriser.assert_called_once_with(
         "other",
