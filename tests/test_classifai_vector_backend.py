@@ -557,6 +557,62 @@ def test_classifai_vector_backend_load_uses_runtime_vectoriser_class(
     )
 
 
+def test_classifai_vector_backend_load_warns_on_vectoriser_class_conflict(
+    tmp_path,
+) -> None:
+    backend = ClassifaiVectorBackend()
+    vectoriser = object()
+    folder_path = str(tmp_path / "vector_store")
+    fake_store = SimpleNamespace(num_vectors=1, search=MagicMock())
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "ensure_persisted_vector_store",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_embedding_model_name",
+            return_value="persisted-model",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_vectoriser_class",
+            return_value="onnx",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "build_vectoriser",
+            return_value=vectoriser,
+        ) as mock_build_vectoriser,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_index_source_file",
+            return_value=None,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.logger.warning",
+        ) as mock_warning,
+    ):
+        backend.load(folder_path=folder_path, vectoriser_class="HF")
+
+    mock_build_vectoriser.assert_called_once_with(
+        embedding_model_name="sentence-transformers/persisted-model",
+        vectoriser_class=VectoriserClass.HUGGINGFACE,
+    )
+    mock_warning.assert_called_once_with(
+        "Vectoriser class provided does not match persisted metadata."
+        "Using provided class.",
+        provided_class="huggingface",
+        persisted_class="onnx",
+    )
+
+
 def test_classifai_vector_backend_set_embedding_model_name_noops_when_unchanged() -> (
     None
 ):
