@@ -1,7 +1,7 @@
 """Public SAYT interfaces and built-in retriever components."""
 
 from survey_assist_embed_core.sayt.builder import SAYTBuilder
-from survey_assist_embed_core.sayt.core import SaytConfiguration
+from survey_assist_embed_core.sayt.core import SaytConfiguration, Suggestion
 from survey_assist_embed_core.sayt.retriever_specs import (
     ArtifactRetrieverSpec,
     NgramRetrieverSpec,
@@ -31,5 +31,6 @@ __all__ = [
     "SaytConfiguration",
     "SemanticRetriever",
     "SemanticRetrieverSpec",
+    "Suggestion",
     "default_retriever_specs",
 ]

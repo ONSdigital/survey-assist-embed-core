@@ -243,9 +243,10 @@ class SaytConfiguration(BaseModel):
     artifact_provenance: SaytArtifactProvenance | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class Suggestion:
+class Suggestion(BaseModel):
     """Represent a SAYT match with its display text and combined score."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     display_text: str
     score: float

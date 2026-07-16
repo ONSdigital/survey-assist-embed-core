@@ -49,9 +49,21 @@ for query in ["car", "cars", "waxi", "grom", "wash", "duplicate", "auto"]:
         print(
             configured.name,
             "->",
-            configured.retriever.suggest_with_scores(query_norm, 5),
+            [
+                suggestion.model_dump()
+                for suggestion in configured.retriever.suggest_with_scores(
+                    query_norm, 5
+                )
+            ],
         )
-    print("combined", "->", suggester.suggest_with_scores(query, 5))
+    print(
+        "combined",
+        "->",
+        [
+            suggestion.model_dump()
+            for suggestion in suggester.suggest_with_scores(query, 5)
+        ],
+    )
     print("combined_nice", "->", suggester.suggest(query, 5))
     print()
 

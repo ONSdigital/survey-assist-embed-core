@@ -40,6 +40,7 @@ def build_classifai_vector_store_artifacts(
     index_source_file: str,
     output_dir: str,
     embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
+    batch_size: int = 128,
 ) -> None:
     """Build persisted ClassifAI vector-store artifacts from a source file.
 
@@ -49,6 +50,8 @@ def build_classifai_vector_store_artifacts(
             written.
         embedding_model_name: Embedding model name or fully qualified
             HuggingFace identifier to use during vectorisation.
+        batch_size: Number of rows to embed per batch while building the
+            vector store.
     """
     embedding_model_name = _normalise_model_name(embedding_model_name)
     logger.info(
@@ -62,11 +65,12 @@ def build_classifai_vector_store_artifacts(
             file_name=local_file,
             data_type="csv",
             vectoriser=vectoriser,
-            batch_size=8,
+            batch_size=batch_size,
             meta_data=None,
             output_dir=output_dir,
             overwrite=True,
             hooks=None,
+            quiet_mode=True,
         )
 
     write_vector_store_metadata(
@@ -168,6 +172,7 @@ class ClassifaiVectorBackend:
             folder_path=folder_path,
             vectoriser=vectoriser,
             hooks=None,
+            quiet_mode=True,
         )
         index_source_file = read_index_source_file(folder_path=folder_path)
         return _ClassifaiVectorIndex(store), index_source_file
