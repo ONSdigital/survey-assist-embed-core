@@ -137,6 +137,7 @@ class ClassifaiVectorBackend:
     def __init__(self):
         """Initialise an unloaded backend waiting for persisted metadata."""
         self._embedding_model_name: str | None = None
+        self._vectoriser_class: str | None = None
         self._vectoriser: VectoriserBase | None = None
 
     @property
@@ -146,6 +147,7 @@ class ClassifaiVectorBackend:
             backend_name="classifai",
             settings={
                 "embedding_model_name": self._embedding_model_name,
+                "vectoriser_class": self._vectoriser_class,
             },
         )
 
@@ -166,21 +168,19 @@ class ClassifaiVectorBackend:
         Returns:
             A tuple of the loaded vector index and the recorded source-file
             path, if available.
-
-        Raises:
-            FileNotFoundError: If the persisted vector store does not contain
-                embedding model metadata.
         """
         ensure_persisted_vector_store(folder_path=folder_path)
         embedding_model_name = read_embedding_model_name(folder_path=folder_path)
+        self._set_embedding_model_name(embedding_model_name)
         if embedding_model_name is None:
-            raise FileNotFoundError(
-                "No embedding model metadata found in persisted vector store."
+            logger.warning(
+                "No embedding model metadata found in persisted vector store. Using default model.",
+                folder_path=folder_path,
+                resolved_model_name=self._embedding_model_name,
             )
 
-        self._set_embedding_model_name(embedding_model_name)
-
-        vectoriser = self._get_vectoriser(vectoriser_class=vectoriser_class)
+        self._set_vectoriser_class(vectoriser_class)
+        vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
             folder_path=folder_path,
             vectoriser=vectoriser,
@@ -189,40 +189,46 @@ class ClassifaiVectorBackend:
         index_source_file = read_index_source_file(folder_path=folder_path)
         return _ClassifaiVectorIndex(store), index_source_file
 
-    def _set_embedding_model_name(self, embedding_model_name: str) -> None:
+    def _set_embedding_model_name(self, embedding_model_name: str | None) -> None:
         """Update the effective embedding model and clear any stale cache."""
-        if self._embedding_model_name == embedding_model_name:
+        resolved_name = resolve_model_name(embedding_model_name)
+        if self._embedding_model_name == resolved_name:
             return
 
-        self._embedding_model_name = embedding_model_name
+        self._embedding_model_name = resolved_name
         self._vectoriser = None
 
-    def _get_vectoriser(self, vectoriser_class: str | None = None) -> VectoriserBase:
+    def _set_vectoriser_class(self, vectoriser_class: str | None) -> None:
+        """Update the effective vectoriser class and clear any stale cache."""
+        resolved_class = resolve_vectoriser_class(vectoriser_class)
+        if self._vectoriser_class == resolved_class:
+            return
+
+        self._vectoriser_class = resolved_class
+        self._vectoriser = None
+
+    def _get_vectoriser(self) -> VectoriserBase:
         """Build and cache the default ClassifAI vectoriser."""
-        vectoriser = self._vectoriser
-        if vectoriser is None:
-            if self._embedding_model_name is None:
-                raise ValueError(
-                    "embedding_model_name must be loaded from persisted metadata "
-                    "before constructing a query vectoriser."
-                )
-            resolved_vectoriser_class = resolve_vectoriser_class(vectoriser_class)
-            vectoriser = _build_vectoriser(
-                self._embedding_model_name, vectoriser_class=resolved_vectoriser_class
-            )
-            self._vectoriser = vectoriser
-        return vectoriser
+        if self._vectoriser is not None:
+            return self._vectoriser
+
+        self._vectoriser = _build_vectoriser(
+            embedding_model_name=self._embedding_model_name,
+            vectoriser_class=self._vectoriser_class,
+        )
+
+        return self._vectoriser
 
 
 def _build_vectoriser(
-    embedding_model_name: str,
+    embedding_model_name: str | None = None,
     *,
     vectoriser_class: str | None = None,
 ) -> VectoriserBase:
     """Construct a concrete vectoriser for the selected backend kind."""
     if resolve_vectoriser_class(vectoriser_class) == "ONNX":
-        return OnnxVectoriser(model=embedding_model_name)
-    return NormalisedHFVectoriser(model_name=embedding_model_name)
+        return OnnxVectoriser(model=resolve_model_name(embedding_model_name))
+    return NormalisedHFVectoriser(model_name=resolve_model_name(embedding_model_name))
 
 
 def resolve_model_name(name: str | None) -> str:

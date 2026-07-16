@@ -273,7 +273,7 @@ def test_search_index_multi_all_none_returns_empty(
     assert response.results == []
 
 
-def test_embedding_handler_initialization(tmp_path: Path) -> None:
+def test_embedding_handler_initialisation(tmp_path: Path) -> None:
     mock_vector_store = SimpleNamespace(num_vectors=123)
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
@@ -290,7 +290,8 @@ def test_embedding_handler_initialization(tmp_path: Path) -> None:
 
     assert isinstance(handler._backend, ClassifaiVectorBackend)
     assert (
-        handler.get_embed_config().backend.settings["embedding_model_name"] == "other"
+        handler.get_embed_config().backend.settings["embedding_model_name"]
+        == "sentence-transformers/other"
     )
 
 
@@ -444,6 +445,7 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     store = SimpleNamespace(num_vectors=7)
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
+    backend._set_vectoriser_class("ONNX")
 
     with patch(
         "survey_assist_embed_core.embed.embedding."
@@ -462,27 +464,10 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     assert cfg.k_matches == EXPECTED_CONFIG_K_MATCHES
     assert cfg.index_size == EXPECTED_CONFIG_INDEX_SIZE
     assert cfg.backend.backend_name == "classifai"
-    assert cfg.backend.settings == {"embedding_model_name": "other"}
-
-
-def test_embedding_handler_constructs_default_backend_without_legacy_device(
-    tmp_path: Path,
-) -> None:
-    store = SimpleNamespace(num_vectors=7)
-
-    with (
-        patch(
-            "survey_assist_embed_core.embed.embedding.ClassifaiVectorBackend",
-        ) as mock_backend_cls,
-        patch(
-            "survey_assist_embed_core.embed.embedding.EmbeddingHandler._load_existing_vector_store",
-            return_value=(store, "mock-source.csv"),
-        ),
-    ):
-        mock_backend_cls.return_value = ClassifaiVectorBackend()
-        EmbeddingHandler(db_dir=str(tmp_path / "vector_store"))
-
-    mock_backend_cls.assert_called_once_with()
+    assert cfg.backend.settings == {
+        "embedding_model_name": "sentence-transformers/other",
+        "vectoriser_class": "ONNX",
+    }
 
 
 def test_normalised_hf_vectoriser_normalise_unit_vectors() -> None:

@@ -82,8 +82,11 @@ def test_classifai_vector_backend_load_uses_from_filespace(tmp_path) -> None:
 
     assert index.num_vectors == EXPECTED_LOADED_VECTOR_COUNT
     assert index_source_file == "source.csv"
-    assert backend.config.settings == {"embedding_model_name": "persisted-model"}
-    mock_build_vectoriser.assert_called_once_with(vectoriser_class=None)
+    assert backend.config.settings == {
+        "embedding_model_name": "sentence-transformers/persisted-model",
+        "vectoriser_class": "ONNX",
+    }
+    mock_build_vectoriser.assert_called_once_with()
     mock_ensure_store.assert_called_once_with(
         folder_path=folder_path,
     )
@@ -394,7 +397,10 @@ def test_classifai_vector_backend_config_reports_loaded_model_name() -> None:
     backend._set_embedding_model_name("other")
 
     assert backend.config.backend_name == "classifai"
-    assert backend.config.settings == {"embedding_model_name": "other"}
+    assert backend.config.settings == {
+        "embedding_model_name": "sentence-transformers/other",
+        "vectoriser_class": None,
+    }
 
 
 def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
@@ -412,8 +418,8 @@ def test_classifai_vector_backend_build_vectoriser_memoizes_instance() -> None:
     assert first is fake_vectoriser
     assert second is fake_vectoriser
     mock_vectoriser.assert_called_once_with(
-        "other",
-        vectoriser_class="ONNX",
+        embedding_model_name="sentence-transformers/other",
+        vectoriser_class=None,
     )
 
 
@@ -454,15 +460,16 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
 def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> None:
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
+    backend._set_vectoriser_class("HF")
 
     with patch(
         "survey_assist_embed_core.adapters.classifai.vector_backend._build_vectoriser",
         return_value=object(),
     ) as mock_vectoriser:
-        backend._get_vectoriser(vectoriser_class="HF")
+        backend._get_vectoriser()
 
     mock_vectoriser.assert_called_once_with(
-        "other",
+        embedding_model_name="sentence-transformers/other",
         vectoriser_class="HF",
     )
 
@@ -504,7 +511,7 @@ def test_classifai_vector_backend_load_uses_runtime_vectoriser_class(
         backend.load(folder_path=folder_path, vectoriser_class="HF")
 
     mock_build_vectoriser.assert_called_once_with(
-        "persisted-model",
+        embedding_model_name="sentence-transformers/persisted-model",
         vectoriser_class="HF",
     )
 
@@ -514,23 +521,13 @@ def test_classifai_vector_backend_set_embedding_model_name_noops_when_unchanged(
 ):
     backend = ClassifaiVectorBackend()
     fake_vectoriser = object()
-    backend._embedding_model_name = "other"
+    backend._embedding_model_name = "sentence-transformers/other"
     backend._vectoriser = fake_vectoriser
 
     backend._set_embedding_model_name("other")
 
-    assert backend._embedding_model_name == "other"
+    assert backend._embedding_model_name == "sentence-transformers/other"
     assert backend._vectoriser is fake_vectoriser
-
-
-def test_classifai_vector_backend_get_vectoriser_requires_loaded_model_name() -> None:
-    backend = ClassifaiVectorBackend()
-
-    with pytest.raises(
-        ValueError,
-        match="embedding_model_name must be loaded from persisted metadata",
-    ):
-        backend._get_vectoriser()
 
 
 def test_classifai_vector_backend_load_requires_embedding_model_metadata(
@@ -538,6 +535,7 @@ def test_classifai_vector_backend_load_requires_embedding_model_metadata(
 ) -> None:
     backend = ClassifaiVectorBackend()
     folder_path = str(tmp_path / "vector_store")
+    fake_store = SimpleNamespace(num_vectors=1, search=MagicMock())
 
     with (
         patch(
@@ -549,9 +547,30 @@ def test_classifai_vector_backend_load_requires_embedding_model_metadata(
             "read_embedding_model_name",
             return_value=None,
         ),
-        pytest.raises(
-            FileNotFoundError,
-            match="No embedding model metadata found in persisted vector store",
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
         ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "read_index_source_file",
+            return_value=None,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.logger.warning",
+        ) as mock_warning,
     ):
-        backend.load(folder_path=folder_path)
+        index, index_source_file = backend.load(folder_path=folder_path)
+
+    assert index.num_vectors == 1
+    assert index_source_file is None
+    assert backend.config.settings == {
+        "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",
+        "vectoriser_class": "ONNX",
+    }
+    mock_warning.assert_called_once_with(
+        "No embedding model metadata found in persisted vector store. Using default model.",
+        folder_path=folder_path,
+        resolved_model_name="sentence-transformers/all-MiniLM-L6-v2",
+    )
