@@ -26,6 +26,7 @@ EXPECTED_LOADED_VECTOR_COUNT = 42
 EXPECTED_BUILT_VECTOR_COUNT = 7
 EXPECTED_SEARCH_LIMIT = 5
 EXPECTED_SEARCH_SCORE = 0.9
+EXPECTED_BATCH_SIZE = 32
 
 
 def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput:
@@ -152,6 +153,37 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         index_source_file="source.csv",
         embedding_model_name="sentence-transformers/other",
     )
+
+
+def test_build_classifai_vector_store_artifacts_allows_batch_size_override() -> None:
+    vectoriser = object()
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "NormalisedHFVectoriser",
+            return_value=vectoriser,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.VectorStore",
+        ) as mock_vector_store,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "write_vector_store_metadata",
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "_resolve_local_path",
+            side_effect=contextmanager(lambda path: iter([path])),
+        ),
+    ):
+        build_classifai_vector_store_artifacts(
+            index_source_file="source.csv",
+            output_dir="vector_store",
+            batch_size=32,
+        )
+
+    assert mock_vector_store.call_args.kwargs["batch_size"] == EXPECTED_BATCH_SIZE
 
 
 def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
