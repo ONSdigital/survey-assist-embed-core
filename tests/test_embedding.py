@@ -319,6 +319,35 @@ def test_load_existing_vector_store_local(tmp_path: Path) -> None:
     )
 
 
+def test_load_existing_vector_store_logs_backend_config_when_available(
+    tmp_path: Path,
+) -> None:
+    db_dir = tmp_path / "vector_store"
+    db_dir.mkdir()
+    fake_store = SimpleNamespace(num_vectors=42)
+    backend = SimpleNamespace(
+        load=MagicMock(return_value=(fake_store, "source.csv")),
+        config=VectorBackendConfig(backend_name="test-backend", settings={"x": 1}),
+    )
+
+    handler = EmbeddingHandler.__new__(EmbeddingHandler)
+    handler.db_dir = str(db_dir)
+    handler._backend = backend
+
+    with patch("survey_assist_embed_core.embed.embedding.logger.info") as mock_info:
+        result = handler._load_vector_store_from_path(folder_path=str(db_dir))
+
+    assert result == (fake_store, "source.csv")
+    mock_info.assert_called_once_with(
+        "Existing vector store loaded successfully",
+        db_dir=str(db_dir),
+        folder_path=str(db_dir),
+        index_source_file="source.csv",
+        num_vectors=42,
+        backend={"backend_name": "test-backend", "settings": {"x": 1}},
+    )
+
+
 def test_load_existing_vector_store_local_missing_files(tmp_path: Path) -> None:
     db_dir = tmp_path / "vector_store"
     db_dir.mkdir()

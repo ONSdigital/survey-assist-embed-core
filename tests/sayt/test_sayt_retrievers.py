@@ -18,12 +18,15 @@ from survey_assist_embed_core.sayt.core import CleanCorpus
 from survey_assist_embed_core.sayt.indexes import (
     DenseVectorIndex,
     _CharNgramVectoriser,
+    _derive_num_retrieved_based_on_duplication,
     load_semantic_index,
 )
 from survey_assist_embed_core.sayt.retrievers import (
     NgramRetriever,
     PrefixRetriever,
     SemanticRetriever,
+    _lookup_prefix,
+    _PrefixTrieNode,
 )
 from survey_assist_embed_core.sayt.suggester import SAYTSuggester
 
@@ -136,6 +139,17 @@ def test_prefix_retriever_handles_empty_prefix_candidates(small_corpus):
     results = retriever.suggest_with_scores("", num_suggestions=5)
 
     assert results == []
+
+
+def test_lookup_prefix_returns_empty_when_prefix_path_ends_missing() -> None:
+    """Return no matches when the final trie step resolves to no child node."""
+    assert _lookup_prefix(_PrefixTrieNode(), "z") == set()
+
+
+def test_dense_candidate_derivation_returns_zero_for_invalid_inputs() -> None:
+    """Return zero candidates when no suggestions or corpus rows are available."""
+    assert _derive_num_retrieved_based_on_duplication(0, 3, 10) == 0
+    assert _derive_num_retrieved_based_on_duplication(5, 3, 0) == 0
 
 
 def test_prefix_retriever_keeps_ties_at_cutoff():
@@ -297,7 +311,9 @@ def test_dense_vector_index_builds_persistent_filespace(
             batch_size,
             output_dir,
             overwrite,
+            skip_save,
             hooks,
+            quiet_mode,
         ):
             captured["file_name"] = file_name
             captured["data_type"] = data_type
@@ -305,7 +321,9 @@ def test_dense_vector_index_builds_persistent_filespace(
             captured["batch_size"] = batch_size
             captured["output_dir"] = output_dir
             captured["overwrite"] = overwrite
+            captured["skip_save"] = skip_save
             captured["hooks"] = hooks
+            captured["quiet_mode"] = quiet_mode
             output_path = Path(output_dir)
             if output_path.is_dir() and overwrite:
                 shutil.rmtree(output_path)
@@ -334,10 +352,12 @@ def test_dense_vector_index_builds_persistent_filespace(
     assert Path(captured["file_name"]).parent != output_dir
     assert captured["data_type"] == "csv"
     assert captured["vectoriser_type"] == "_StubVectoriser"
-    assert captured["batch_size"] == 64
+    assert captured["batch_size"] == 128
     assert captured["output_dir"] == str(output_dir)
     assert captured["overwrite"] is True
+    assert captured["skip_save"] is False
     assert captured["hooks"] is None
+    assert captured["quiet_mode"] is True
     assert captured["rows"] == [
         {"label": display_text, "text": search_text}
         for search_text, display_text in corpus.rows
@@ -371,10 +391,11 @@ def test_dense_vector_index_loads_existing_filespace(
     class _StubLoadedVectorStore:
         num_vectors = 7
 
-    def _fake_from_filespace(*, folder_path, vectoriser, hooks):
+    def _fake_from_filespace(*, folder_path, vectoriser, hooks, quiet_mode):
         captured["folder_path"] = folder_path
         captured["vectoriser_type"] = type(vectoriser).__name__
         captured["hooks"] = hooks
+        captured["quiet_mode"] = quiet_mode
         return _StubLoadedVectorStore()
 
     monkeypatch.setattr(
@@ -395,6 +416,7 @@ def test_dense_vector_index_loads_existing_filespace(
         "folder_path": str(folder_path),
         "vectoriser_type": "_StubVectoriser",
         "hooks": None,
+        "quiet_mode": True,
     }
 
 
