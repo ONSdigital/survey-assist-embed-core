@@ -6,6 +6,7 @@ from survey_assist_embed_core.adapters.storage.gcs import (
     download_vector_store_from_gcs,
     is_gcs_path,
     parse_gcs_uri,
+    resolve_local_path,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "download_vector_store_from_gcs",
     "is_gcs_path",
     "parse_gcs_uri",
+    "resolve_local_path",
 ]

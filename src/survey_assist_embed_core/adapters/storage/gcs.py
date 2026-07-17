@@ -2,6 +2,8 @@
 
 import os
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Self
@@ -166,3 +168,14 @@ def download_one_file_from_gcs(gcs_uri: str) -> DownloadedVectorStore:
     )
 
     return DownloadedVectorStore(path=local_path, temp_dir=temp_dir)
+
+
+@contextmanager
+def resolve_local_path(path: str) -> Iterator[str]:
+    """Yield a local path, downloading one file first when given a GCS URI."""
+    if is_gcs_path(path):
+        with download_one_file_from_gcs(path) as downloaded:
+            yield downloaded.path
+        return
+
+    yield path

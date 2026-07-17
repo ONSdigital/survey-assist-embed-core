@@ -540,3 +540,53 @@ def test_normalised_hf_vectoriser_transform_list_passes_through() -> None:
 
     mock_super.assert_called_once_with(["hello", "world"])
     assert result.shape == (2, 2)
+
+
+def test_vectoriser_class_missing_returns_none_for_non_string_values() -> None:
+    """Non-string enum coercion should fall back to normal enum failure flow."""
+    assert vectoriser_module.VectoriserClass._missing_(object()) is None
+
+
+def test_onnx_vectoriser_transform_reshapes_single_vector_output() -> None:
+    """A single returned embedding should be reshaped to a 2D row matrix."""
+
+    class _StubOnnxModel:  # pylint: disable=too-few-public-methods
+        def embed(self, texts: list[str]):
+            assert texts == ["hello"]
+            return np.array([3.0, 4.0], dtype=np.float32)
+
+    inst = vectoriser_module.OnnxVectoriser.__new__(vectoriser_module.OnnxVectoriser)
+    inst.model = _StubOnnxModel()
+
+    result = inst.transform("hello")
+
+    assert result.shape == (1, 2)
+    assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
+
+
+def test_normalised_hf_vectoriser_init_passes_device_to_super() -> None:
+    """Initialisation should delegate the selected device to the HF base class."""
+    with patch(
+        "survey_assist_embed_core.adapters.classifai.vectoriser.HuggingFaceVectoriser.__init__",
+        return_value=None,
+    ) as mock_super_init:
+        NormalisedHFVectoriser(model_name="test-model", device="cpu")
+
+    mock_super_init.assert_called_once_with(model_name="test-model", device="cpu")
+
+
+def test_build_vectoriser_returns_huggingface_variant_for_hf_kind() -> None:
+    """Explicit HF selection should build the normalising HF vectoriser."""
+    fake_vectoriser = object()
+
+    with patch(
+        "survey_assist_embed_core.adapters.classifai.vectoriser.NormalisedHFVectoriser",
+        return_value=fake_vectoriser,
+    ) as mock_hf:
+        result = vectoriser_module.build_vectoriser(
+            "test-model",
+            vectoriser_class="HF",
+        )
+
+    mock_hf.assert_called_once_with(model_name="test-model")
+    assert result is fake_vectoriser

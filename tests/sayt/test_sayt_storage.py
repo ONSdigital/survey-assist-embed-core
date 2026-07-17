@@ -3,6 +3,7 @@
 # pylint: disable=protected-access,too-few-public-methods,missing-function-docstring,no-member
 
 import json
+from contextlib import contextmanager
 
 import pytest
 
@@ -38,6 +39,25 @@ def test_prepare_artifact_dir_handles_existing_paths(tmp_path):
 
     assert replaced == artifact_file
     assert artifact_file.is_dir()
+
+
+def test_load_corpus_from_csv_downloads_gcs_inputs(monkeypatch, tmp_path):
+    """Resolve GCS CSV inputs to a local file before reading them."""
+    csv_path = tmp_path / "source.csv"
+    csv_path.write_text("title,display\ndog,Dog\n", encoding="utf-8")
+
+    @contextmanager
+    def fake_resolve_local_path(_path: str):
+        yield str(csv_path)
+
+    monkeypatch.setattr(storage, "resolve_local_path", fake_resolve_local_path)
+
+    rows = storage.load_corpus_from_csv(
+        "gs://bucket/source.csv",
+        display_text_col="display",
+    )
+
+    assert rows == [("dog", "Dog")]
 
 
 def test_read_artifact_inputs_validate_missing_and_malformed_state(tmp_path):
