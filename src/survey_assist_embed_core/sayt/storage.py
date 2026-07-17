@@ -333,9 +333,13 @@ def _deserialise_stored_retriever(payload: dict[str, object]) -> StoredRetriever
             max_df=_coerce_float(config["max_df"], field_name="max_df"),
         )
     elif retriever_type == "semantic":
+        vectoriser_class = config.get("vectoriser_class")
         spec = SemanticRetrieverSpec(
             weight=weight,
             model=str(config["model"]),
+            vectoriser_class=(
+                None if vectoriser_class is None else str(vectoriser_class)
+            ),
         )
     else:
         raise ValueError(f"Unsupported stored retriever type: {retriever_type}")

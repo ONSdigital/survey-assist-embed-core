@@ -12,11 +12,18 @@ from typing import cast
 
 import numpy as np
 from classifai.indexers import VectorStore, VectorStoreSearchInput
-from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
+from classifai.vectorisers import VectoriserBase
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 from survey_assist_utils import get_logger
 
+from survey_assist_embed_core.adapters.classifai.vector_backend import (
+    resolve_model_name,
+)
+from survey_assist_embed_core.adapters.classifai.vectoriser import (
+    build_vectoriser,
+    normalise_vectors,
+)
 from survey_assist_embed_core.sayt.core import CleanCorpus, Suggestion, take_with_ties
 
 logger = get_logger(__name__)
@@ -217,23 +224,6 @@ class DenseVectorIndex:
                 return out
 
 
-class _L2NormalisingVectoriser(VectoriserBase):
-    """Wraps a classifai vectoriser and L2-normalises its outputs."""
-
-    def __init__(self, base: VectoriserBase) -> None:
-        """Store the wrapped vectoriser used for raw embeddings."""
-        self._base = base
-
-    def transform(self, texts: str | list[str]) -> np.ndarray:
-        """Vectorise inputs and scale each output row to unit length."""
-        vectors = self._base.transform(texts)
-        vectors = np.asarray(vectors, dtype=float)
-        if vectors.ndim == 1:
-            vectors = vectors.reshape(1, -1)
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        return vectors / np.clip(norms, 1e-12, None)
-
-
 class _CharNgramVectoriser(VectoriserBase):
     """CountVectorizer char_wb n-gram vectoriser with unit-length outputs."""
 
@@ -252,8 +242,8 @@ class _CharNgramVectoriser(VectoriserBase):
             texts = [texts]
         matrix = cast(csr_matrix, self._vectoriser.transform(texts))
         vectors = matrix.toarray().astype(float, copy=False)
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        return vectors / np.clip(norms, 1e-12, None)
+
+        return normalise_vectors(vectors)
 
 
 def build_ngram_index(
@@ -313,6 +303,7 @@ def build_semantic_index(
     corpus: CleanCorpus,
     *,
     model: str,
+    vectoriser_class: str | None = None,
     output_dir: str | os.PathLike[str] | None = None,
     overwrite: bool = True,
 ) -> DenseVectorIndex:
@@ -321,6 +312,8 @@ def build_semantic_index(
     Args:
         corpus: Cleaned corpus to index.
         model: Sentence-transformer model name without the repository prefix.
+        vectoriser_class: Optional semantic vectoriser class to use ("ONNX" or "HF").
+            If not provided, the default ONNX vectoriser is used.
         output_dir: Optional persistent filespace directory for the generated
             vector store.
         overwrite: Whether to allow ClassifAI to replace an existing filespace
@@ -329,10 +322,12 @@ def build_semantic_index(
     Returns:
         A dense index using semantic embeddings.
     """
-    base_vectoriser: VectoriserBase = HuggingFaceVectoriser(
-        f"sentence-transformers/{model}"
+    semantic_model = resolve_model_name(model)
+    semantic_vectoriser = build_vectoriser(
+        embedding_model_name=semantic_model,
+        vectoriser_class=vectoriser_class,
     )
-    semantic_vectoriser: VectoriserBase = _L2NormalisingVectoriser(base_vectoriser)
+
     return DenseVectorIndex.from_corpus(
         corpus=corpus,
         vectoriser=semantic_vectoriser,
@@ -345,13 +340,16 @@ def load_semantic_index(
     corpus: CleanCorpus,
     *,
     model: str,
+    vectoriser_class: str | None = None,
     folder_path: str | os.PathLike[str],
 ) -> DenseVectorIndex:
     """Load a persisted dense index backed by semantic embeddings."""
-    base_vectoriser: VectoriserBase = HuggingFaceVectoriser(
-        f"sentence-transformers/{model}"
+    semantic_model = resolve_model_name(model)
+    semantic_vectoriser = build_vectoriser(
+        embedding_model_name=semantic_model,
+        vectoriser_class=vectoriser_class,
     )
-    semantic_vectoriser: VectoriserBase = _L2NormalisingVectoriser(base_vectoriser)
+
     return DenseVectorIndex.from_filespace(
         corpus=corpus,
         folder_path=folder_path,

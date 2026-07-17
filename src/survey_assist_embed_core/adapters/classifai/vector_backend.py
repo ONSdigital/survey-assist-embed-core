@@ -15,10 +15,14 @@ from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
     read_embedding_model_name,
     read_index_source_file,
+    read_vectoriser_class,
     write_vector_store_metadata,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
-    NormalisedHFVectoriser,
+    VectoriserBase,
+    VectoriserClass,
+    VectoriserClassLike,
+    build_vectoriser,
 )
 from survey_assist_embed_core.adapters.storage import (
     download_one_file_from_gcs,
@@ -39,7 +43,8 @@ def build_classifai_vector_store_artifacts(
     *,
     index_source_file: str,
     output_dir: str,
-    embedding_model_name: str = DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME,
+    embedding_model_name: str | None = None,
+    vectoriser_class: VectoriserClassLike = None,
     batch_size: int = 128,
 ) -> None:
     """Build persisted ClassifAI vector-store artifacts from a source file.
@@ -50,17 +55,24 @@ def build_classifai_vector_store_artifacts(
             written.
         embedding_model_name: Embedding model name or fully qualified
             HuggingFace identifier to use during vectorisation.
+        vectoriser_class: Optional vectoriser kind to use for the persisted
+            vector store.  If not provided, the default ONNX vectoriser is used.
         batch_size: Number of rows to embed per batch while building the
             vector store.
     """
-    embedding_model_name = _normalise_model_name(embedding_model_name)
+    embedding_model_name = resolve_model_name(embedding_model_name)
+    vectoriser_class = VectoriserClass.resolve(vectoriser_class)
     logger.info(
         "Starting vector store artifact build",
         embedding_model_name=embedding_model_name,
+        vectoriser_class=vectoriser_class.value,
+        index_source_file=index_source_file,
         output_dir=output_dir,
     )
     with _resolve_local_path(index_source_file) as local_file:
-        vectoriser = NormalisedHFVectoriser(model_name=embedding_model_name)
+        vectoriser = build_vectoriser(
+            embedding_model_name, vectoriser_class=vectoriser_class
+        )
         VectorStore(
             file_name=local_file,
             data_type="csv",
@@ -77,6 +89,7 @@ def build_classifai_vector_store_artifacts(
         folder_path=output_dir,
         index_source_file=index_source_file,
         embedding_model_name=embedding_model_name,
+        vectoriser_class=vectoriser_class.value,
     )
     logger.info(
         "Vector store artifacts built successfully",
@@ -131,7 +144,8 @@ class ClassifaiVectorBackend:
     def __init__(self):
         """Initialise an unloaded backend waiting for persisted metadata."""
         self._embedding_model_name: str | None = None
-        self._vectoriser: NormalisedHFVectoriser | None = None
+        self._vectoriser_class: VectoriserClass | None = None
+        self._vectoriser: VectoriserBase | None = None
 
     @property
     def config(self) -> VectorBackendConfig:
@@ -140,32 +154,38 @@ class ClassifaiVectorBackend:
             backend_name="classifai",
             settings={
                 "embedding_model_name": self._embedding_model_name,
+                "vectoriser_class": (
+                    self._vectoriser_class.value
+                    if self._vectoriser_class is not None
+                    else None
+                ),
             },
         )
 
-    def load(self, *, folder_path: str) -> tuple[VectorIndex, str | None]:
+    def load(
+        self,
+        *,
+        folder_path: str,
+        vectoriser_class: VectoriserClassLike = None,
+    ) -> tuple[VectorIndex, str | None]:
         """Load a persisted ClassifAI vector store from a local folder.
 
         Args:
             folder_path: Local folder containing the persisted vector-store
                 artifacts.
+            vectoriser_class: Optional vectoriser kind to use for the loaded
+                vector store.  If not provided, the vectoriser class is read
+                from persisted metadata and if absent the default ONNX is used.
 
         Returns:
             A tuple of the loaded vector index and the recorded source-file
             path, if available.
-
-        Raises:
-            FileNotFoundError: If the persisted vector store does not contain
-                embedding model metadata.
         """
         ensure_persisted_vector_store(folder_path=folder_path)
         embedding_model_name = read_embedding_model_name(folder_path=folder_path)
-        if embedding_model_name is None:
-            raise FileNotFoundError(
-                "No embedding model metadata found in persisted vector store."
-            )
-
         self._set_embedding_model_name(embedding_model_name)
+        vectoriser_class_stored = read_vectoriser_class(folder_path=folder_path)
+        self._set_vectoriser_class(vectoriser_class, vectoriser_class_stored)
 
         vectoriser = self._get_vectoriser()
         store = VectorStore.from_filespace(
@@ -177,35 +197,75 @@ class ClassifaiVectorBackend:
         index_source_file = read_index_source_file(folder_path=folder_path)
         return _ClassifaiVectorIndex(store), index_source_file
 
-    def _set_embedding_model_name(self, embedding_model_name: str) -> None:
+    def _set_embedding_model_name(self, embedding_model_name: str | None) -> None:
         """Update the effective embedding model and clear any stale cache."""
-        if self._embedding_model_name == embedding_model_name:
+        resolved_name = resolve_model_name(embedding_model_name)
+        if embedding_model_name is None:
+            logger.warning(
+                "No embedding model metadata found in persisted vector store. Using default model.",
+                resolved_model_name=resolved_name,
+            )
+        if self._embedding_model_name == resolved_name:
             return
 
-        self._embedding_model_name = embedding_model_name
+        self._embedding_model_name = resolved_name
         self._vectoriser = None
 
-    def _get_vectoriser(self) -> NormalisedHFVectoriser:
-        """Build and cache the default ClassifAI vectoriser."""
-        vectoriser = self._vectoriser
-        if vectoriser is None:
-            if self._embedding_model_name is None:
-                raise ValueError(
-                    "embedding_model_name must be loaded from persisted metadata "
-                    "before constructing a query vectoriser."
+    def _set_vectoriser_class(
+        self,
+        vectoriser_class: VectoriserClassLike = None,
+        vectoriser_class_stored: VectoriserClassLike = None,
+    ) -> None:
+        """Update the effective vectoriser class and clear any stale cache."""
+        resolved_class = (
+            VectoriserClass.resolve(vectoriser_class_stored)
+            if vectoriser_class is None
+            else VectoriserClass.resolve(vectoriser_class)
+        )
+        if vectoriser_class_stored is not None and vectoriser_class is not None:
+            stored_class = VectoriserClass.resolve(vectoriser_class_stored)
+            if resolved_class != stored_class:
+                logger.warning(
+                    "Vectoriser class provided does not match persisted metadata."
+                    "Using provided class.",
+                    provided_class=resolved_class.value,
+                    persisted_class=stored_class.value,
                 )
-            vectoriser = NormalisedHFVectoriser(model_name=self._embedding_model_name)
-            self._vectoriser = vectoriser
-        return vectoriser
+
+        if self._vectoriser_class == resolved_class:
+            return
+
+        self._vectoriser_class = resolved_class
+        self._vectoriser = None
+
+    def _get_vectoriser(self) -> VectoriserBase:
+        """Build and cache the default ClassifAI vectoriser."""
+        if self._vectoriser is not None:
+            return self._vectoriser
+
+        if self._embedding_model_name is None:
+            raise ValueError(
+                "embedding_model_name must be loaded from persisted metadata "
+                "before constructing a query vectoriser."
+            )
+
+        self._vectoriser = build_vectoriser(
+            embedding_model_name=self._embedding_model_name,
+            vectoriser_class=self._vectoriser_class,
+        )
+
+        return self._vectoriser
 
 
-def _normalise_model_name(name: str) -> str:
+def resolve_model_name(name: str | None) -> str:
     """Return a fully-qualified HuggingFace model identifier.
 
     If ``name`` already contains a ``/`` it is treated as a complete
     ``{org}/{model}`` identifier and returned unchanged.  Otherwise the
     sentence-transformers organisation is prepended as the default.
     """
+    if name is None:
+        return DEFAULT_CLASSIFAI_EMBEDDING_MODEL_NAME
     if "/" in name:
         return name
     return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"

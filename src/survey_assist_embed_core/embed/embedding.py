@@ -57,6 +57,7 @@ class EmbeddingHandler:
         k_matches: int = DEFAULT_K_MATCHES,
         *,
         backend: VectorBackend | None = None,
+        spellcheck: bool = False,
     ):
         """Initialise the handler for a pre-built vector store.
 
@@ -65,6 +66,7 @@ class EmbeddingHandler:
             k_matches: Maximum number of matches to return per search.
             backend: Optional vector backend implementation. When omitted, a
                 ``ClassifaiVectorBackend`` is created.
+            spellcheck: Whether to enable autocorrect for multi-field search terms.
 
         Raises:
             ValueError: If the persisted vector store contains no vectors.
@@ -73,7 +75,7 @@ class EmbeddingHandler:
         self.db_dir = db_dir
         self._backend = backend if backend is not None else ClassifaiVectorBackend()
 
-        self.spell = Speller()
+        self.spell = Speller(fast=True) if spellcheck else None
 
         self.vector_store, self.index_source_file = self._load_existing_vector_store()
 
@@ -127,7 +129,8 @@ class EmbeddingHandler:
         for i in range(1, len(query_terms) + 1):
             term = " ".join(query_terms[:i])
             search_terms.add(term)
-            search_terms.add(self.spell(term))
+            if self.spell is not None:
+                search_terms.add(self.spell(term))
         n_results = min(self.index_size, self.k_matches)
         short_list = [
             item

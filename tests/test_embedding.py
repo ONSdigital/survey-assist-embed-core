@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+import survey_assist_embed_core.adapters.classifai.vectoriser as vectoriser_module
 from survey_assist_embed_core.adapters.classifai import (
     ClassifaiVectorBackend,
     NormalisedHFVectoriser,
@@ -272,7 +273,7 @@ def test_search_index_multi_all_none_returns_empty(
     assert response.results == []
 
 
-def test_embedding_handler_initialization(tmp_path: Path) -> None:
+def test_embedding_handler_initialisation(tmp_path: Path) -> None:
     mock_vector_store = SimpleNamespace(num_vectors=123)
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
@@ -289,7 +290,8 @@ def test_embedding_handler_initialization(tmp_path: Path) -> None:
 
     assert isinstance(handler._backend, ClassifaiVectorBackend)
     assert (
-        handler.get_embed_config().backend.settings["embedding_model_name"] == "other"
+        handler.get_embed_config().backend.settings["embedding_model_name"]
+        == "sentence-transformers/other"
     )
 
 
@@ -472,6 +474,7 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     store = SimpleNamespace(num_vectors=7)
     backend = ClassifaiVectorBackend()
     backend._set_embedding_model_name("other")
+    backend._set_vectoriser_class("ONNX")
 
     with patch(
         "survey_assist_embed_core.embed.embedding."
@@ -490,21 +493,22 @@ def test_get_embed_config_returns_correct_values(tmp_path: Path) -> None:
     assert cfg.k_matches == EXPECTED_CONFIG_K_MATCHES
     assert cfg.index_size == EXPECTED_CONFIG_INDEX_SIZE
     assert cfg.backend.backend_name == "classifai"
-    assert cfg.backend.settings == {"embedding_model_name": "other"}
+    assert cfg.backend.settings == {
+        "embedding_model_name": "sentence-transformers/other",
+        "vectoriser_class": "onnx",
+    }
 
 
-def test_normalised_hf_vectoriser_normalize_unit_vectors() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
+def test_normalised_hf_vectoriser_normalise_unit_vectors() -> None:
     vectors = np.array([[3.0, 4.0], [1.0, 0.0]])
-    result = inst._normalize(vectors)
+    result = vectoriser_module.normalise_vectors(vectors)
 
     assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
 
 
 def test_normalised_hf_vectoriser_zero_vectors_do_not_divide_by_zero() -> None:
-    inst = NormalisedHFVectoriser.__new__(NormalisedHFVectoriser)
     vectors = np.array([[0.0, 0.0], [1.0, 0.0]])
-    result = inst._normalize(vectors)
+    result = vectoriser_module.normalise_vectors(vectors)
 
     assert np.allclose(result[0], [0.0, 0.0])
     assert np.allclose(np.linalg.norm(result[1]), 1.0)
