@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from survey_assist_embed_core.adapters.storage import resolve_local_path
 from survey_assist_embed_core.sayt.core import (
     CleanCorpus,
     PersistedCorpusRow,
@@ -70,7 +71,8 @@ def load_corpus_from_csv(
     Raises:
         ValueError: If the requested search or display column is missing.
     """
-    df = pd.read_csv(file_path)
+    with resolve_local_path(str(file_path)) as local_file:
+        df = pd.read_csv(local_file)
     if search_text_col not in df.columns:
         raise ValueError(f"Column '{search_text_col}' not found in CSV")
     if display_text_col is None:

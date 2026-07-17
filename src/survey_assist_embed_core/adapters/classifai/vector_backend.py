@@ -1,7 +1,5 @@
 """ClassifAI implementation of the vector backend port."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import cast
 
 from classifai.indexers import (
@@ -24,10 +22,7 @@ from survey_assist_embed_core.adapters.classifai.vectoriser import (
     VectoriserClassLike,
     build_vectoriser,
 )
-from survey_assist_embed_core.adapters.storage import (
-    download_one_file_from_gcs,
-    is_gcs_path,
-)
+from survey_assist_embed_core.adapters.storage import resolve_local_path
 from survey_assist_embed_core.models import VectorBackendConfig
 from survey_assist_embed_core.ports import SearchRow, VectorIndex
 
@@ -69,7 +64,7 @@ def build_classifai_vector_store_artifacts(
         index_source_file=index_source_file,
         output_dir=output_dir,
     )
-    with _resolve_local_path(index_source_file) as local_file:
+    with resolve_local_path(index_source_file) as local_file:
         vectoriser = build_vectoriser(
             embedding_model_name, vectoriser_class=vectoriser_class
         )
@@ -269,13 +264,3 @@ def resolve_model_name(name: str | None) -> str:
     if "/" in name:
         return name
     return f"{_DEFAULT_SENTENCE_TRANSFORMERS_ORG}/{name}"
-
-
-@contextmanager
-def _resolve_local_path(path: str) -> Iterator[str]:
-    """Yield a local filesystem path, downloading from GCS if necessary."""
-    if is_gcs_path(path):
-        with download_one_file_from_gcs(path) as downloaded:
-            yield downloaded.path
-    else:
-        yield path

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -18,10 +17,9 @@ from survey_assist_embed_core.adapters.classifai import (
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
     VectoriserClass,
     _ClassifaiVectorIndex,
-    _resolve_local_path,
     resolve_model_name,
 )
-from survey_assist_embed_core.adapters.storage import DownloadedVectorStore
+from survey_assist_embed_core.adapters.storage import resolve_local_path
 
 EXPECTED_LOADED_VECTOR_COUNT = 42
 EXPECTED_BUILT_VECTOR_COUNT = 7
@@ -128,8 +126,8 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         ) as mock_write_vector_store_metadata,
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "_resolve_local_path",
-            side_effect=contextmanager(lambda path: iter([path])),
+            "resolve_local_path",
+            side_effect=resolve_local_path,
         ),
     ):
         build_classifai_vector_store_artifacts(
@@ -179,8 +177,8 @@ def test_build_classifai_vector_store_artifacts_allows_batch_size_override() -> 
         ),
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "_resolve_local_path",
-            side_effect=contextmanager(lambda path: iter([path])),
+            "resolve_local_path",
+            side_effect=resolve_local_path,
         ),
     ):
         build_classifai_vector_store_artifacts(
@@ -194,7 +192,7 @@ def test_build_classifai_vector_store_artifacts_allows_batch_size_override() -> 
 
 def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
     local_file = str(tmp_path / "source.csv")
-    with _resolve_local_path(local_file) as resolved:
+    with resolve_local_path(local_file) as resolved:
         assert resolved == local_file
 
 
@@ -254,10 +252,6 @@ def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
         search=MagicMock(),
     )
     downloaded_path = str(tmp_path / "downloaded.csv")
-    downloaded = DownloadedVectorStore(
-        path=downloaded_path,
-        temp_dir=SimpleNamespace(name=str(tmp_path), cleanup=lambda: None),
-    )
 
     with (
         patch(
@@ -274,13 +268,8 @@ def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
             "write_vector_store_metadata",
         ),
         patch(
-            "survey_assist_embed_core.adapters.classifai.vector_backend.is_gcs_path",
-            return_value=True,
-        ),
-        patch(
-            "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "download_one_file_from_gcs",
-            return_value=downloaded,
+            "survey_assist_embed_core.adapters.classifai.vector_backend.resolve_local_path",
+            return_value=resolve_local_path(downloaded_path),
         ) as mock_download,
     ):
         build_classifai_vector_store_artifacts(
@@ -481,8 +470,8 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
             + ".vector_backend.write_vector_store_metadata",
         ),
         patch(
-            "survey_assist_embed_core.adapters.classifai.vector_backend._resolve_local_path",
-            side_effect=contextmanager(lambda path: iter([path])),
+            "survey_assist_embed_core.adapters.classifai.vector_backend.resolve_local_path",
+            side_effect=resolve_local_path,
         ),
     ):
         build_classifai_vector_store_artifacts(
