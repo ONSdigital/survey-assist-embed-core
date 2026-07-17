@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -188,6 +190,58 @@ def test_build_classifai_vector_store_artifacts_allows_batch_size_override() -> 
         )
 
     assert mock_vector_store.call_args.kwargs["batch_size"] == EXPECTED_BATCH_SIZE
+
+
+def test_build_classifai_vector_store_artifacts_rebuilds_with_classifai_metadata(
+    tmp_path,
+) -> None:
+    """Allow rebuilds when ClassifAI has already written its own metadata keys."""
+    output_dir = tmp_path / "vector_store"
+    source_file = tmp_path / "source.csv"
+    source_file.write_text("label,text\n1,Alpha\n", encoding="utf-8")
+
+    def fake_vector_store(**kwargs):
+        folder = Path(kwargs["output_dir"])
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "metadata.json").write_text(
+            '{"vectoriser_class": "OnnxVectoriser", "num_vectors": 1}',
+            encoding="utf-8",
+        )
+        (folder / "vectors.parquet").write_text("dummy", encoding="utf-8")
+        return SimpleNamespace(num_vectors=1, search=MagicMock())
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "build_vectoriser",
+            return_value=object(),
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend.VectorStore",
+            side_effect=fake_vector_store,
+        ),
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "resolve_local_path",
+            side_effect=resolve_local_path,
+        ),
+    ):
+        build_classifai_vector_store_artifacts(
+            index_source_file=str(source_file),
+            output_dir=str(output_dir),
+            embedding_model_name="other",
+        )
+        build_classifai_vector_store_artifacts(
+            index_source_file=str(source_file),
+            output_dir=str(output_dir),
+            embedding_model_name="other",
+        )
+
+    metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["vectoriser_class"] == "OnnxVectoriser"
+    assert metadata["vectoriser_kind"] == "onnx"
+    assert metadata["index_source_file"] == str(source_file)
+    assert metadata["embedding_model_name"] == "sentence-transformers/other"
 
 
 def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
