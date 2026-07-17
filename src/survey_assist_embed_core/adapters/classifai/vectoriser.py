@@ -11,17 +11,17 @@ from fastembed import TextEmbedding
 _ONNX_MODEL_CACHE: dict[tuple[str, str | None], TextEmbedding] = {}
 _ONNX_MODEL_CACHE_LOCK = Lock()
 
-type VectoriserClassLike = str | VectoriserClass | None
+type VectoriserKindLike = str | VectoriserKind | None
 
 
-class VectoriserClass(StrEnum):
+class VectoriserKind(StrEnum):
     """Canonical selector values for supported semantic vectorisers."""
 
     ONNX = "onnx"
     HUGGINGFACE = "huggingface"
 
     @classmethod
-    def _missing_(cls, value: object) -> "VectoriserClass | None":
+    def _missing_(cls, value: object) -> "VectoriserKind | None":
         """Accept common alias spellings for vectoriser selection."""
         if not isinstance(value, str):
             return None
@@ -45,10 +45,10 @@ class VectoriserClass(StrEnum):
         return None
 
     @classmethod
-    def resolve(cls, value: VectoriserClassLike) -> "VectoriserClass":
+    def resolve(cls, value: VectoriserKindLike) -> "VectoriserKind":
         """Resolve optional loose caller input into a canonical enum value."""
         if value is None:
-            return _DEFAULT_VECTORIZER_CLASS
+            return _DEFAULT_VECTORIZER_KIND
         if isinstance(value, cls):
             return value
         try:
@@ -59,7 +59,7 @@ class VectoriserClass(StrEnum):
             ) from exc
 
 
-_DEFAULT_VECTORIZER_CLASS = VectoriserClass.ONNX
+_DEFAULT_VECTORIZER_KIND = VectoriserKind.ONNX
 
 
 def _get_cached_onnx_model(model: str, *, device: str | None = None) -> TextEmbedding:
@@ -137,9 +137,9 @@ class NormalisedHFVectoriser(HuggingFaceVectoriser):
 def build_vectoriser(
     embedding_model_name: str,
     *,
-    vectoriser_class: VectoriserClassLike = None,
+    vectoriser_class: VectoriserKindLike = None,
 ) -> VectoriserBase:
     """Construct a concrete vectoriser for the selected backend kind."""
-    if VectoriserClass.resolve(vectoriser_class) == VectoriserClass.ONNX:
+    if VectoriserKind.resolve(vectoriser_class) == VectoriserKind.ONNX:
         return OnnxVectoriser(model=embedding_model_name)
     return NormalisedHFVectoriser(model_name=embedding_model_name)

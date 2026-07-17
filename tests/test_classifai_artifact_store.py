@@ -77,6 +77,7 @@ def test_write_vector_store_metadata_rejects_collision_with_existing_key(
             folder_path=str(folder_path),
             index_source_file="source.csv",
             embedding_model_name="sentence-transformers/all-MiniLM-L6-v2",
+            vectoriser_kind="onnx",
         )
 
 
@@ -91,7 +92,7 @@ def test_write_vector_store_metadata_noops_when_no_values_are_provided(
         folder_path=str(folder_path),
         index_source_file=None,
         embedding_model_name=None,
-        vectoriser_class=None,
+        vectoriser_kind=None,
     )
 
     assert not (folder_path / "metadata.json").exists()

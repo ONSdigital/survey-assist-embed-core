@@ -7,7 +7,7 @@ METADATA_FILE_NAME = "metadata.json"
 VECTORS_FILE_NAME = "vectors.parquet"
 INDEX_SOURCE_FILE_KEY = "index_source_file"
 EMBEDDING_MODEL_NAME_KEY = "embedding_model_name"
-VECTORISER_CLASS_KEY = "vectoriser_class"
+VECTORISER_KIND_KEY = "vectoriser_kind"
 
 
 def write_vector_store_metadata(
@@ -15,7 +15,7 @@ def write_vector_store_metadata(
     folder_path: str,
     index_source_file: str | None,
     embedding_model_name: str | None,
-    vectoriser_class: str | None = None,
+    vectoriser_kind: str | None = None,
 ) -> None:
     """Write extended classifai metadata into a persisted vector-store folder.
 
@@ -27,7 +27,7 @@ def write_vector_store_metadata(
         folder_path: Folder that contains the persisted vector-store artifacts.
         index_source_file: Original source-file path to record in the metadata.
         embedding_model_name: Embedding model identifier to record.
-        vectoriser_class: Optional vectoriser class identifier to record.
+        vectoriser_kind: Optional vectoriser kind identifier to record.
 
     Raises:
         ValueError: If the metadata file already contains one of the reserved
@@ -36,7 +36,7 @@ def write_vector_store_metadata(
     our_key_values = {
         INDEX_SOURCE_FILE_KEY: index_source_file,
         EMBEDDING_MODEL_NAME_KEY: embedding_model_name,
-        VECTORISER_CLASS_KEY: vectoriser_class,
+        VECTORISER_KIND_KEY: vectoriser_kind,
     }
     new_key_values = {k: v for k, v in our_key_values.items() if v is not None}
     if not new_key_values:
@@ -104,18 +104,18 @@ def read_embedding_model_name(*, folder_path: str) -> str | None:
     return metadata.get(EMBEDDING_MODEL_NAME_KEY)
 
 
-def read_vectoriser_class(*, folder_path: str) -> str | None:
-    """Read the recorded vectoriser class name from persisted metadata.
+def read_vectoriser_kind(*, folder_path: str) -> str | None:
+    """Read the recorded vectoriser kind from persisted metadata.
 
     Args:
         folder_path: Folder that contains the persisted vector-store artifacts.
 
     Returns:
-        The vectoriser class name recorded in metadata, or ``None`` when the
-        value is absent.
+        The vectoriser kind recorded in metadata, or ``None`` when the value
+        is absent.
     """
     metadata = _read_metadata(folder_path)
-    return metadata.get(VECTORISER_CLASS_KEY)
+    return metadata.get(VECTORISER_KIND_KEY)
 
 
 def _has_persisted_vector_store(folder_path: str) -> bool:

@@ -13,13 +13,13 @@ from survey_assist_embed_core.adapters.classifai.artifacts import (
     ensure_persisted_vector_store,
     read_embedding_model_name,
     read_index_source_file,
-    read_vectoriser_class,
+    read_vectoriser_kind,
     write_vector_store_metadata,
 )
 from survey_assist_embed_core.adapters.classifai.vectoriser import (
     VectoriserBase,
-    VectoriserClass,
-    VectoriserClassLike,
+    VectoriserKind,
+    VectoriserKindLike,
     build_vectoriser,
 )
 from survey_assist_embed_core.adapters.storage import resolve_local_path
@@ -39,7 +39,7 @@ def build_classifai_vector_store_artifacts(
     index_source_file: str,
     output_dir: str,
     embedding_model_name: str | None = None,
-    vectoriser_class: VectoriserClassLike = None,
+    vectoriser_class: VectoriserKindLike = None,
     batch_size: int = 128,
 ) -> None:
     """Build persisted ClassifAI vector-store artifacts from a source file.
@@ -56,7 +56,7 @@ def build_classifai_vector_store_artifacts(
             vector store.
     """
     embedding_model_name = resolve_model_name(embedding_model_name)
-    vectoriser_class = VectoriserClass.resolve(vectoriser_class)
+    vectoriser_class = VectoriserKind.resolve(vectoriser_class)
     logger.info(
         "Starting vector store artifact build",
         embedding_model_name=embedding_model_name,
@@ -84,7 +84,7 @@ def build_classifai_vector_store_artifacts(
         folder_path=output_dir,
         index_source_file=index_source_file,
         embedding_model_name=embedding_model_name,
-        vectoriser_class=vectoriser_class.value,
+        vectoriser_kind=vectoriser_class.value,
     )
     logger.info(
         "Vector store artifacts built successfully",
@@ -139,7 +139,7 @@ class ClassifaiVectorBackend:
     def __init__(self):
         """Initialise an unloaded backend waiting for persisted metadata."""
         self._embedding_model_name: str | None = None
-        self._vectoriser_class: VectoriserClass | None = None
+        self._vectoriser_class: VectoriserKind | None = None
         self._vectoriser: VectoriserBase | None = None
 
     @property
@@ -161,7 +161,7 @@ class ClassifaiVectorBackend:
         self,
         *,
         folder_path: str,
-        vectoriser_class: VectoriserClassLike = None,
+        vectoriser_class: VectoriserKindLike = None,
     ) -> tuple[VectorIndex, str | None]:
         """Load a persisted ClassifAI vector store from a local folder.
 
@@ -179,7 +179,7 @@ class ClassifaiVectorBackend:
         ensure_persisted_vector_store(folder_path=folder_path)
         embedding_model_name = read_embedding_model_name(folder_path=folder_path)
         self._set_embedding_model_name(embedding_model_name)
-        vectoriser_class_stored = read_vectoriser_class(folder_path=folder_path)
+        vectoriser_class_stored = read_vectoriser_kind(folder_path=folder_path)
         self._set_vectoriser_class(vectoriser_class, vectoriser_class_stored)
 
         vectoriser = self._get_vectoriser()
@@ -208,17 +208,17 @@ class ClassifaiVectorBackend:
 
     def _set_vectoriser_class(
         self,
-        vectoriser_class: VectoriserClassLike = None,
-        vectoriser_class_stored: VectoriserClassLike = None,
+        vectoriser_class: VectoriserKindLike = None,
+        vectoriser_class_stored: VectoriserKindLike = None,
     ) -> None:
         """Update the effective vectoriser class and clear any stale cache."""
         resolved_class = (
-            VectoriserClass.resolve(vectoriser_class_stored)
+            VectoriserKind.resolve(vectoriser_class_stored)
             if vectoriser_class is None
-            else VectoriserClass.resolve(vectoriser_class)
+            else VectoriserKind.resolve(vectoriser_class)
         )
         if vectoriser_class_stored is not None and vectoriser_class is not None:
-            stored_class = VectoriserClass.resolve(vectoriser_class_stored)
+            stored_class = VectoriserKind.resolve(vectoriser_class_stored)
             if resolved_class != stored_class:
                 logger.warning(
                     "Vectoriser class provided does not match persisted metadata."
