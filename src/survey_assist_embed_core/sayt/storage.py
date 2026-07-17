@@ -60,7 +60,8 @@ def load_corpus_from_csv(
     """Load raw corpus tuples from a CSV file.
 
     Args:
-        file_path: Path to the CSV file containing suggestion rows.
+        file_path: Local path or ``gs://`` URI for the CSV file containing
+            suggestion rows.
         search_text_col: Column containing the searchable text.
         display_text_col: Optional column containing display text. When
             omitted, the search column is reused for display values.
