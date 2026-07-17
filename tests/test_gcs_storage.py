@@ -14,6 +14,7 @@ from survey_assist_embed_core.adapters.storage.gcs import (
     download_vector_store_from_gcs,
     is_gcs_path,
     parse_gcs_uri,
+    resolve_local_path,
 )
 
 NON_GCS_PATH = "local/path"
@@ -297,3 +298,39 @@ def test_download_one_file_from_gcs_missing_file() -> None:
         ),
     ):
         download_one_file_from_gcs("gs://my-bucket/path/to/data.csv")
+
+
+@pytest.mark.utils
+def test_resolve_local_path_downloads_gcs_file() -> None:
+    """The shared resolver should yield the downloaded local path for GCS URIs."""
+
+    class _FakeTempDir:  # pylint: disable=too-few-public-methods
+        """Test double that records whether cleanup was requested."""
+
+        def __init__(self) -> None:
+            """Initialise the cleanup flag."""
+            self.cleaned_up = False
+
+        def cleanup(self) -> None:
+            """Record that cleanup was triggered."""
+            self.cleaned_up = True
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        local_path = str(Path(temp_dir) / "downloaded.csv")
+        temp_dir_handle = _FakeTempDir()
+        downloaded = DownloadedVectorStore(
+            path=local_path,
+            temp_dir=temp_dir_handle,
+        )
+
+        with (
+            patch(
+                "survey_assist_embed_core.adapters.storage.gcs.download_one_file_from_gcs",
+                return_value=downloaded,
+            ) as mock_download,
+            resolve_local_path("gs://my-bucket/path/to/data.csv") as resolved,
+        ):
+            assert resolved == local_path
+
+        mock_download.assert_called_once_with("gs://my-bucket/path/to/data.csv")
+    assert temp_dir_handle.cleaned_up is True

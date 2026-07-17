@@ -78,3 +78,20 @@ def test_write_vector_store_metadata_rejects_collision_with_existing_key(
             index_source_file="source.csv",
             embedding_model_name="sentence-transformers/all-MiniLM-L6-v2",
         )
+
+
+def test_write_vector_store_metadata_noops_when_no_values_are_provided(
+    tmp_path: Path,
+) -> None:
+    """Skip metadata writes entirely when all extended fields are omitted."""
+    folder_path = tmp_path / "vector_store"
+    folder_path.mkdir()
+
+    artifacts.write_vector_store_metadata(
+        folder_path=str(folder_path),
+        index_source_file=None,
+        embedding_model_name=None,
+        vectoriser_class=None,
+    )
+
+    assert not (folder_path / "metadata.json").exists()

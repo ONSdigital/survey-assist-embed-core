@@ -504,6 +504,27 @@ def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> Non
     )
 
 
+def test_classifai_vector_backend_set_vectoriser_class_noops_when_unchanged() -> None:
+    """Avoid clearing the cached vectoriser when the resolved class is unchanged."""
+    backend = ClassifaiVectorBackend()
+    cached_vectoriser = object()
+    backend._vectoriser_class = VectoriserClass.ONNX
+    backend._vectoriser = cached_vectoriser
+
+    backend._set_vectoriser_class("ONNX")
+
+    assert backend._vectoriser_class == VectoriserClass.ONNX
+    assert backend._vectoriser is cached_vectoriser
+
+
+def test_classifai_vector_backend_get_vectoriser_requires_model_name() -> None:
+    """Reject vectoriser construction before model metadata is loaded."""
+    backend = ClassifaiVectorBackend()
+
+    with pytest.raises(ValueError, match="embedding_model_name must be loaded"):
+        backend._get_vectoriser()
+
+
 def test_classifai_vector_backend_load_uses_runtime_vectoriser_class(
     tmp_path,
 ) -> None:
