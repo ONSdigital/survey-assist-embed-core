@@ -22,24 +22,26 @@ class VectoriserClass(StrEnum):
 
     @classmethod
     def _missing_(cls, value: object) -> "VectoriserClass | None":
-        """Accept common alias spellings for vectoriser selection."""
+        """Accept selector strings and concrete class names for vectorisers."""
         if not isinstance(value, str):
             return None
-        normalised_class = (
-            value.strip()
-            .casefold()
-            .replace("_", "")
-            .replace("-", "")
-            .removesuffix("vectoriser")
-            .removesuffix("vectorizer")
-        )
-        if normalised_class == "onnx":
+        normalised_value = value.strip().casefold().replace("_", "").replace("-", "")
+        if not normalised_value:
+            return None
+
+        if normalised_value in {"onnx", "onnxvectoriser", "onnxvectorizer"}:
             return cls.ONNX
-        if normalised_class in {
+        if normalised_value in {
             "hf",
             "huggingface",
+            "huggingfacevectoriser",
+            "huggingfacevectorizer",
             "normalisedhf",
+            "normalisedhfvectoriser",
+            "normalisedhfvectorizer",
             "normalizedhf",
+            "normalizedhfvectoriser",
+            "normalizedhfvectorizer",
         }:
             return cls.HUGGINGFACE
         return None

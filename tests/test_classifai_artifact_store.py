@@ -91,7 +91,21 @@ def test_write_vector_store_metadata_noops_when_no_values_are_provided(
         folder_path=str(folder_path),
         index_source_file=None,
         embedding_model_name=None,
-        vectoriser_class=None,
     )
 
     assert not (folder_path / "metadata.json").exists()
+
+
+def test_read_vectoriser_class_reads_classifai_metadata_key(tmp_path: Path) -> None:
+    """Read the vectoriser class name directly from ClassifAI metadata."""
+    folder_path = tmp_path / "vector_store"
+    folder_path.mkdir()
+    (folder_path / "metadata.json").write_text(
+        json.dumps({artifacts.VECTORISER_CLASS_KEY: "OnnxVectoriser"}),
+        encoding="utf-8",
+    )
+
+    assert (
+        artifacts.read_vectoriser_class(folder_path=str(folder_path))
+        == "OnnxVectoriser"
+    )
