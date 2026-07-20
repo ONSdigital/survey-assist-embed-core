@@ -22,10 +22,10 @@ class VectoriserClass(StrEnum):
 
     @classmethod
     def _missing_(cls, value: object) -> "VectoriserClass | None":
-        """Accept selector strings and concrete class names for vectorisers."""
+        """Accept common alias spellings for vectoriser selection."""
         if not isinstance(value, str):
             return None
-        normalised_value = (
+        normalised_class = (
             value.strip()
             .casefold()
             .replace("_", "")
@@ -33,10 +33,9 @@ class VectoriserClass(StrEnum):
             .removesuffix("vectoriser")
             .removesuffix("vectorizer")
         )
-
-        if normalised_value == "onnx":
+        if normalised_class == "onnx":
             return cls.ONNX
-        if normalised_value in {
+        if normalised_class in {
             "hf",
             "huggingface",
             "normalisedhf",
