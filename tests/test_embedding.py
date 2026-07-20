@@ -547,6 +547,11 @@ def test_vectoriser_class_missing_returns_none_for_non_string_values() -> None:
     assert vectoriser_module.VectoriserClass._missing_(object()) is None
 
 
+def test_vectoriser_class_missing_returns_none_for_blank_string() -> None:
+    """Blank alias strings should not resolve to a vectoriser class."""
+    assert vectoriser_module.VectoriserClass._missing_("   ") is None
+
+
 def test_onnx_vectoriser_transform_reshapes_single_vector_output() -> None:
     """A single returned embedding should be reshaped to a 2D row matrix."""
 

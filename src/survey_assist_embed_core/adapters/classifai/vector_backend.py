@@ -84,7 +84,6 @@ def build_classifai_vector_store_artifacts(
         folder_path=output_dir,
         index_source_file=index_source_file,
         embedding_model_name=embedding_model_name,
-        vectoriser_class=vectoriser_class.value,
     )
     logger.info(
         "Vector store artifacts built successfully",

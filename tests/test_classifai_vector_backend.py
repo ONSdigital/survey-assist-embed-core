@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 from classifai.indexers import VectorStoreSearchOutput
+from classifai.vectorisers import VectoriserBase
 
 from survey_assist_embed_core.adapters.classifai import (
     ClassifaiVectorBackend,
@@ -26,6 +29,16 @@ EXPECTED_BUILT_VECTOR_COUNT = 7
 EXPECTED_SEARCH_LIMIT = 5
 EXPECTED_SEARCH_SCORE = 0.9
 EXPECTED_BATCH_SIZE = 32
+
+
+class TinyVectoriser(VectoriserBase):  # pylint: disable=too-few-public-methods
+    """Minimal vectoriser for smoke tests that need a real ClassifAI build."""
+
+    def transform(self, texts):
+        if isinstance(texts, str):
+            texts = [texts]
+        rows = [[float(len(text)), 1.0] for text in texts]
+        return np.asarray(rows, dtype=np.float32)
 
 
 def make_search_output(rows: list[dict[str, object]]) -> VectorStoreSearchOutput:
@@ -155,7 +168,6 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         folder_path="vector_store",
         index_source_file="source.csv",
         embedding_model_name="sentence-transformers/other",
-        vectoriser_class="onnx",
     )
 
 
@@ -190,6 +202,40 @@ def test_build_classifai_vector_store_artifacts_allows_batch_size_override() -> 
     assert mock_vector_store.call_args.kwargs["batch_size"] == EXPECTED_BATCH_SIZE
 
 
+def test_build_classifai_vector_store_artifacts_rebuilds_with_classifai_metadata(
+    tmp_path,
+) -> None:
+    """Allow rebuilds when ClassifAI has already written its own metadata keys."""
+    output_dir = tmp_path / "vector_store"
+    source_file = tmp_path / "source.csv"
+    source_file.write_text("label,text\n1,Alpha\n", encoding="utf-8")
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "build_vectoriser",
+            return_value=TinyVectoriser(),
+        ),
+    ):
+        build_classifai_vector_store_artifacts(
+            index_source_file=str(source_file),
+            output_dir=str(output_dir),
+            embedding_model_name="other",
+        )
+        build_classifai_vector_store_artifacts(
+            index_source_file=str(source_file),
+            output_dir=str(output_dir),
+            embedding_model_name="other",
+        )
+
+    metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["vectoriser_class"] == "TinyVectoriser"
+    assert metadata["num_vectors"] == 1
+    assert "vectoriser_kind" not in metadata
+    assert metadata["index_source_file"] == str(source_file)
+    assert metadata["embedding_model_name"] == "sentence-transformers/other"
+
+
 def test_classifai_resolve_local_path_yields_path_unchanged(tmp_path) -> None:
     local_file = str(tmp_path / "source.csv")
     with resolve_local_path(local_file) as resolved:
@@ -222,6 +268,9 @@ def test_classifai_normalise_model_name_prepends_prefix() -> None:
         ("HF", VectoriserClass.HUGGINGFACE),
         ("hf", VectoriserClass.HUGGINGFACE),
         ("huggingface", VectoriserClass.HUGGINGFACE),
+        ("HuggingFaceVectoriser", VectoriserClass.HUGGINGFACE),
+        ("NormalisedHFVectoriser", VectoriserClass.HUGGINGFACE),
+        ("NormalizedHFVectorizer", VectoriserClass.HUGGINGFACE),
         ("normalised_hf_vectoriser", VectoriserClass.HUGGINGFACE),
         ("normalized_hf_vectorizer", VectoriserClass.HUGGINGFACE),
     ],
@@ -565,6 +614,51 @@ def test_classifai_vector_backend_load_uses_runtime_vectoriser_class(
         embedding_model_name="sentence-transformers/persisted-model",
         vectoriser_class=VectoriserClass.HUGGINGFACE,
     )
+
+
+def test_classifai_vector_backend_load_reads_stored_vectoriser_class(
+    tmp_path,
+) -> None:
+    backend = ClassifaiVectorBackend()
+    vectoriser = object()
+    folder = tmp_path / "vector_store"
+    folder.mkdir()
+    (folder / "metadata.json").write_text(
+        json.dumps(
+            {
+                "vectoriser_class": "OnnxVectoriser",
+                "embedding_model_name": "persisted-model",
+                "index_source_file": "source.csv",
+                "num_vectors": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (folder / "vectors.parquet").write_text("dummy", encoding="utf-8")
+    fake_store = SimpleNamespace(num_vectors=1, search=MagicMock())
+
+    with (
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "build_vectoriser",
+            return_value=vectoriser,
+        ) as mock_build_vectoriser,
+        patch(
+            "survey_assist_embed_core.adapters.classifai.vector_backend."
+            "VectorStore.from_filespace",
+            return_value=fake_store,
+        ),
+    ):
+        backend.load(folder_path=str(folder))
+
+    mock_build_vectoriser.assert_called_once_with(
+        embedding_model_name="sentence-transformers/persisted-model",
+        vectoriser_class=VectoriserClass.ONNX,
+    )
+    assert backend.config.settings == {
+        "embedding_model_name": "sentence-transformers/persisted-model",
+        "vectoriser_class": "onnx",
+    }
 
 
 def test_classifai_vector_backend_load_warns_on_vectoriser_class_conflict(
