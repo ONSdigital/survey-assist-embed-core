@@ -544,7 +544,7 @@ def test_normalised_hf_vectoriser_transform_list_passes_through() -> None:
 
 def test_vectoriser_class_missing_returns_none_for_non_string_values() -> None:
     """Non-string enum coercion should fall back to normal enum failure flow."""
-    assert vectoriser_module.VectoriserKind._missing_(object()) is None
+    assert vectoriser_module.VectoriserClass._missing_(object()) is None
 
 
 def test_onnx_vectoriser_transform_reshapes_single_vector_output() -> None:

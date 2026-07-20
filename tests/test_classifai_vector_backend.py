@@ -17,7 +17,7 @@ from survey_assist_embed_core.adapters.classifai import (
     build_classifai_vector_store_artifacts,
 )
 from survey_assist_embed_core.adapters.classifai.vector_backend import (
-    VectoriserKind,
+    VectoriserClass,
     _ClassifaiVectorIndex,
     resolve_model_name,
 )
@@ -140,7 +140,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
 
     mock_build_vectoriser.assert_called_once_with(
         "sentence-transformers/other",
-        vectoriser_class=VectoriserKind.ONNX,
+        vectoriser_class=VectoriserClass.ONNX,
     )
     mock_vector_store.assert_called_once_with(
         file_name="source.csv",
@@ -157,7 +157,7 @@ def test_build_classifai_vector_store_artifacts_uses_expected_args() -> None:
         folder_path="vector_store",
         index_source_file="source.csv",
         embedding_model_name="sentence-transformers/other",
-        vectoriser_kind="onnx",
+        vectoriser_class="onnx",
     )
 
 
@@ -268,24 +268,24 @@ def test_classifai_normalise_model_name_prepends_prefix() -> None:
 @pytest.mark.parametrize(
     "raw_value, expected",
     [
-        ("ONNX", VectoriserKind.ONNX),
-        ("onnx", VectoriserKind.ONNX),
-        ("onnx_vectoriser", VectoriserKind.ONNX),
-        ("onnx_vectorizer", VectoriserKind.ONNX),
-        ("OnnxVectoriser", VectoriserKind.ONNX),
-        ("HF", VectoriserKind.HUGGINGFACE),
-        ("hf", VectoriserKind.HUGGINGFACE),
-        ("huggingface", VectoriserKind.HUGGINGFACE),
-        ("normalised_hf_vectoriser", VectoriserKind.HUGGINGFACE),
-        ("normalized_hf_vectorizer", VectoriserKind.HUGGINGFACE),
+        ("ONNX", VectoriserClass.ONNX),
+        ("onnx", VectoriserClass.ONNX),
+        ("onnx_vectoriser", VectoriserClass.ONNX),
+        ("onnx_vectorizer", VectoriserClass.ONNX),
+        ("OnnxVectoriser", VectoriserClass.ONNX),
+        ("HF", VectoriserClass.HUGGINGFACE),
+        ("hf", VectoriserClass.HUGGINGFACE),
+        ("huggingface", VectoriserClass.HUGGINGFACE),
+        ("normalised_hf_vectoriser", VectoriserClass.HUGGINGFACE),
+        ("normalized_hf_vectorizer", VectoriserClass.HUGGINGFACE),
     ],
 )
 def test_resolve_vectoriser_class_accepts_aliases(
     raw_value: str,
-    expected: VectoriserKind,
+    expected: VectoriserClass,
 ):
     """Accept mixed-case and common alias forms for vectoriser class selection."""
-    assert VectoriserKind.resolve(raw_value) == expected
+    assert VectoriserClass.resolve(raw_value) == expected
 
 
 def test_resolve_vectoriser_class_rejects_unknown_alias() -> None:
@@ -294,7 +294,7 @@ def test_resolve_vectoriser_class_rejects_unknown_alias() -> None:
         ValueError,
         match="must resolve to either 'onnx' or 'huggingface'",
     ):
-        VectoriserKind.resolve("bert")
+        VectoriserClass.resolve("bert")
 
 
 def test_build_classifai_vector_store_artifacts_downloads_gcs_source_file(
@@ -537,7 +537,7 @@ def test_build_classifai_vector_store_artifacts_passes_explicit_vectoriser_class
 
     mock_build_vectoriser.assert_called_once_with(
         "sentence-transformers/other",
-        vectoriser_class=VectoriserKind.HUGGINGFACE,
+        vectoriser_class=VectoriserClass.HUGGINGFACE,
     )
 
 
@@ -554,7 +554,7 @@ def test_classifai_vector_backend_build_vectoriser_uses_configured_kind() -> Non
 
     mock_vectoriser.assert_called_once_with(
         embedding_model_name="sentence-transformers/other",
-        vectoriser_class=VectoriserKind.HUGGINGFACE,
+        vectoriser_class=VectoriserClass.HUGGINGFACE,
     )
 
 
@@ -562,12 +562,12 @@ def test_classifai_vector_backend_set_vectoriser_class_noops_when_unchanged() ->
     """Avoid clearing the cached vectoriser when the resolved class is unchanged."""
     backend = ClassifaiVectorBackend()
     cached_vectoriser = object()
-    backend._vectoriser_class = VectoriserKind.ONNX
+    backend._vectoriser_class = VectoriserClass.ONNX
     backend._vectoriser = cached_vectoriser
 
     backend._set_vectoriser_class("ONNX")
 
-    assert backend._vectoriser_class == VectoriserKind.ONNX
+    assert backend._vectoriser_class == VectoriserClass.ONNX
     assert backend._vectoriser is cached_vectoriser
 
 
@@ -617,7 +617,7 @@ def test_classifai_vector_backend_load_uses_runtime_vectoriser_class(
 
     mock_build_vectoriser.assert_called_once_with(
         embedding_model_name="sentence-transformers/persisted-model",
-        vectoriser_class=VectoriserKind.HUGGINGFACE,
+        vectoriser_class=VectoriserClass.HUGGINGFACE,
     )
 
 
@@ -641,7 +641,7 @@ def test_classifai_vector_backend_load_warns_on_vectoriser_class_conflict(
         ),
         patch(
             "survey_assist_embed_core.adapters.classifai.vector_backend."
-            "read_vectoriser_kind",
+            "read_vectoriser_class",
             return_value="onnx",
         ),
         patch(
@@ -667,7 +667,7 @@ def test_classifai_vector_backend_load_warns_on_vectoriser_class_conflict(
 
     mock_build_vectoriser.assert_called_once_with(
         embedding_model_name="sentence-transformers/persisted-model",
-        vectoriser_class=VectoriserKind.HUGGINGFACE,
+        vectoriser_class=VectoriserClass.HUGGINGFACE,
     )
     mock_warning.assert_called_once_with(
         "Vectoriser class provided does not match persisted metadata."
