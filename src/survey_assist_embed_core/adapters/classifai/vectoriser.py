@@ -25,23 +25,22 @@ class VectoriserClass(StrEnum):
         """Accept selector strings and concrete class names for vectorisers."""
         if not isinstance(value, str):
             return None
-        normalised_value = value.strip().casefold().replace("_", "").replace("-", "")
-        if not normalised_value:
-            return None
+        normalised_value = (
+            value.strip()
+            .casefold()
+            .replace("_", "")
+            .replace("-", "")
+            .removesuffix("vectoriser")
+            .removesuffix("vectorizer")
+        )
 
-        if normalised_value in {"onnx", "onnxvectoriser", "onnxvectorizer"}:
+        if normalised_value == "onnx":
             return cls.ONNX
         if normalised_value in {
             "hf",
             "huggingface",
-            "huggingfacevectoriser",
-            "huggingfacevectorizer",
             "normalisedhf",
-            "normalisedhfvectoriser",
-            "normalisedhfvectorizer",
             "normalizedhf",
-            "normalizedhfvectoriser",
-            "normalizedhfvectorizer",
         }:
             return cls.HUGGINGFACE
         return None
