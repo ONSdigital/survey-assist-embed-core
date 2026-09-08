@@ -16,12 +16,10 @@ class RetrieverWeightSpec(Protocol):
     @property
     def retriever_name(self) -> str:
         """Name of the retriever this weight applies to."""
-        ...
 
     @property
     def weights(self) -> int | float | dict[int, float]:
         """Raw weight configuration (fixed number or query-length-specific)."""
-        ...
 
     def get_weight(self, query_length: int) -> float:
         """Get the weight for a given query length.
@@ -32,7 +30,6 @@ class RetrieverWeightSpec(Protocol):
         Returns:
             The weight value for this retriever at the given query length.
         """
-        ...
 
 
 def _validate_retriever_weight(weight: float) -> None:
