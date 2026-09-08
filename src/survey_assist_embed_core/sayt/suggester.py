@@ -36,6 +36,7 @@ from survey_assist_embed_core.sayt.storage import (
     read_artifact_corpus,
     read_artifact_manifest,
 )
+from survey_assist_embed_core.sayt.weight_specs import WeightSpecs
 
 logger = get_logger(__name__)
 
@@ -104,6 +105,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
         retrievers: Sequence[RetrieverSpec] | None = None,
+        weights: WeightSpecs | None = None,
         min_chars: int = 4,
         max_suggestions: int = 10,
     ) -> None:
@@ -114,6 +116,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 pairs.
             retrievers: Optional retriever specifications. When omitted, the
                 standard prefix, n-gram, and semantic spec set is used.
+            weights: Optional retriever weight specifications. When omitted, the
+                standard prefix, n-gram, and semantic weight set is used.
             min_chars: Minimum query length before retrieval runs.
             max_suggestions: Default maximum number of ranked suggestions to
                 return.
@@ -121,6 +125,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         super().__init__(
             corpus,
             retrievers=retrievers,
+            weights=weights,
             min_chars=min_chars,
             max_suggestions=max_suggestions,
         )
@@ -213,6 +218,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             for spec, weight in _normalised_retriever_specs(retriever_specs)
         ]
 
+    def _build_weights(self, weight_specs: WeightSpecs) -> WeightSpecs:
+        return weight_specs
+
     def _combine_suggestions(
         self,
         result_groups: Iterable[tuple[float, list[Suggestion]]],
@@ -260,27 +268,27 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self,
         q_norm: str,
         num_suggestions: int,
-        retrievers_weight_spec: Sequence[RetrieverSpec] | None = None,
+        weights: WeightSpecs | None = None,
     ) -> list[tuple[float, list[Suggestion]]]:
         result = []
+        if weights is not None:
+            weights_specs = self._build_weights(weights)
+        else:
+            weights_specs = self._weights
+
         for configured_retriever in self._retrievers:
             start_time = time.time()
-            if retrievers_weight_spec is not None and not any(
-                r.name == configured_retriever.name for r in retrievers_weight_spec
-            ):
+
+            configured_retriever_weight = weights_specs.get_weight(
+                configured_retriever.name, len(q_norm)
+            )
+
+            if configured_retriever_weight == 0.0:
                 continue
+
             result.append(
                 (
-                    configured_retriever.weight
-                    if retrievers_weight_spec is None
-                    else next(
-                        (
-                            r.weight
-                            for r in retrievers_weight_spec
-                            if r.name == configured_retriever.name
-                        ),
-                        configured_retriever.weight,
-                    ),
+                    configured_retriever_weight,
                     configured_retriever.retriever.suggest_with_scores(
                         q_norm,
                         num_suggestions=num_suggestions,
@@ -303,7 +311,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self,
         query: str | None,
         num_suggestions: int | None = None,
-        retrievers_weight_spec: Sequence[RetrieverSpec] | None = None,
+        weights: WeightSpecs | None = None,
     ) -> list[Suggestion]:
         """Return ranked suggestions and their combined scores.
 
@@ -311,7 +319,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             query: Raw user query text.
             num_suggestions: Optional maximum number of ranked suggestions to
                 return. When omitted, the configured default is used.
-            retrievers_weight_spec: Optional retriever weight override. When supplied,
+            weights: Optional retriever weight override. When supplied,
                 the suggester will reweight the configured retrievers for this
                 query only. The retriever order is preserved, but the weights are
                 normalised to sum to 1.0.
@@ -338,7 +346,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             q_norm,
             num_suggestions=num_suggestions * 5,
             # collect more to allow pairing up scores with other retrievers
-            retrievers_weight_spec=retrievers_weight_spec,
+            weights=weights,
         )
 
         combined_result = self._combine_suggestions(results_by_kind)
@@ -350,7 +358,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self,
         query: str | None,
         num_suggestions: int | None = None,
-        retrievers_weight_spec: Sequence[RetrieverSpec] | None = None,
+        weights: WeightSpecs | None = None,
     ) -> list[str]:
         """Return display-text-deduplicated suggestions.
 
@@ -358,7 +366,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             query: Raw user query text.
             num_suggestions: Optional maximum number of display values to
                 return. When omitted, the configured default is used.
-            retrievers_weight_spec: Optional retriever weight override. When supplied,
+            weights: Optional retriever weight override. When supplied,
                 the suggester will reweight the configured retrievers for this
                 query only. The retriever order is preserved, but the weights are
                 normalised to sum to 1.0. This is useful for testing or for
@@ -376,7 +384,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         results = self.suggest_with_scores(
             query,
             num_suggestions=num_suggestions,
-            retrievers_weight_spec=retrievers_weight_spec,
+            weights=weights,
         )
         elapsed_time = time.time() - start_time
         logger.debug(
