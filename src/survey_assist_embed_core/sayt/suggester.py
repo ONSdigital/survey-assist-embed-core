@@ -443,6 +443,21 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             ),
         )
 
+    def update_weights(
+        self,
+        weights: WeightSpecs,
+    ) -> None:
+        """Update the retriever weights for this suggester.
+
+        Args:
+            weights: The new retriever weights to apply to this suggester.
+
+        Raises:
+            ValueError: If the provided weights are invalid or empty.
+        """
+        self._weight_specs = weights
+        self._weights = _normalised_weight_specs(self._weight_specs)
+
 
 def _normalised_retriever_specs(
     retriever_specs: Sequence[RetrieverSpec],
