@@ -59,7 +59,7 @@ class WeightConfig:
                     raise ValueError(f"Query length must be positive int, got {length}")
                 _validate_retriever_weight(weight)
 
-    def get_weight(self, query_length: int | None = None) -> float:
+    def get_weight(self, query_length: int | None = None) -> float | None:
         """Get weight for this retriever at a query length.
 
         Args:
@@ -73,13 +73,9 @@ class WeightConfig:
         if isinstance(self.weights, (int, float)):
             return float(self.weights)
 
-        # Dictionary lookup with nearest lower bound
-        if query_length is None:
-            raise ValueError("query_length must be provided for dict weights")
-
         valid_lengths = [length for length in self.weights if length <= query_length]
         if not valid_lengths:
-            return 0.0
+            return None
         best_length = max(valid_lengths)
         return self.weights[best_length]
 
@@ -128,7 +124,9 @@ class WeightSpecs:
                 return spec
         return None
 
-    def get_weight(self, retriever_name: str, query_length: int) -> float:
+    def get_weight(
+        self, retriever_name: str, query_length: int | None = None
+    ) -> float | None:
         """Get weight for a specific retriever at a query length.
 
         Args:
@@ -136,12 +134,65 @@ class WeightSpecs:
             query_length: The normalized query length in characters.
 
         Returns:
-            The weight for the retriever, or 0.0 if retriever not found.
+            The weight for the retriever, or None if retriever not found.
         """
         spec = self.get_weight_spec(retriever_name)
         if spec is None:
-            return 0.0
+            return None
         return spec.get_weight(query_length)
+
+    def get_normalised_weights(
+        self, query_length: int | None = None
+    ) -> dict[str, float]:
+        """Get normalised weights for all retrievers at a query length.
+
+        Args:
+            query_length: The normalized query length in characters.
+
+        Returns:
+            A dictionary mapping retriever names to their normalised weights.
+        """
+        if all(isinstance(spec.weights, (int, float)) for spec in self.specs):
+            # All weights are fixed numbers, normalise directly
+            total_weight = sum(spec.get_weight() for spec in self.specs)
+            if total_weight <= 0:
+                raise ValueError("Total weight cannot be zero")
+            return {
+                spec.retriever_name: spec.get_weight() / total_weight
+                for spec in self.specs
+                if spec.get_weight() > 0
+            }
+        else:
+            if query_length is not None and query_length > 0:
+                num_chars = [query_length]
+            else:
+                num_chars = {
+                    num_char
+                    for spec in self.specs
+                    if isinstance(spec.weights, dict)
+                    for num_char in spec.weights
+                }
+
+            weights = {spec.retriever_name: {} for spec in self.specs}
+            for num_char in num_chars:
+                if num_char <= 0:
+                    raise ValueError(
+                        f"Query length must be positive int, got {num_char}"
+                    )
+
+                total_weight = sum(
+                    spec.get_weight(num_char)
+                    for spec in self.specs
+                    if spec.get_weight(num_char)
+                )
+                for spec in self.specs:
+                    weight = spec.get_weight(num_char)
+                    if weight is None:
+                        continue
+                    _validate_retriever_weight(weight)
+                    weights[spec.retriever_name][num_char] = weight / total_weight
+
+            return weights
 
 
 def default_weight_specs() -> WeightSpecs:

@@ -132,6 +132,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self._retrievers = self._build_retrievers(self._retriever_specs)
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
+        self._weights = _normalised_weight_specs(self._weights)
+
         logger.info(
             "SAYT suggester initialised",
             corpus_size=self._corpus.size,
@@ -218,9 +220,6 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             for spec, weight in _normalised_retriever_specs(retriever_specs)
         ]
 
-    def _build_weights(self, weight_specs: WeightSpecs) -> WeightSpecs:
-        return weight_specs
-
     def _combine_suggestions(
         self,
         result_groups: Iterable[tuple[float, list[Suggestion]]],
@@ -272,18 +271,18 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
     ) -> list[tuple[float, list[Suggestion]]]:
         result = []
         if weights is not None:
-            weights_specs = self._build_weights(weights)
+            weight_specs = _normalised_weight_specs(weights, query_length=len(q_norm))
         else:
-            weights_specs = self._weights
+            weight_specs = self._weights
 
         for configured_retriever in self._retrievers:
             start_time = time.time()
 
-            configured_retriever_weight = weights_specs.get_weight(
+            configured_retriever_weight = weight_specs.get_weight(
                 configured_retriever.name, len(q_norm)
             )
 
-            if configured_retriever_weight == 0.0:
+            if configured_retriever_weight is None:
                 continue
 
             result.append(
@@ -463,6 +462,23 @@ def _normalised_retriever_specs(
 
     total_weight = sum(weight for _, weight in validated_specs)
     return [(spec, weight / total_weight) for spec, weight in validated_specs]
+
+
+def _normalised_weight_specs(
+    weight_specs: WeightSpecs,
+    query_length: int | None = None,
+) -> WeightSpecs:
+    if not weight_specs.specs:
+        raise ValueError("At least one retriever weight must be configured")
+
+    weights_dict = weight_specs.get_normalised_weights(query_length=query_length)
+    updated_specs = []
+    for spec in weight_specs.specs:
+        if spec.retriever_name in weights_dict:
+            spec_type = type(spec)
+            updated_specs.append(spec_type(weights=weights_dict[spec.retriever_name]))
+
+    return WeightSpecs(specs=updated_specs)
 
 
 def _load_retrievers_from_artifact(
