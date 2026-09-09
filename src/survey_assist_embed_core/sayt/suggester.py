@@ -282,7 +282,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 configured_retriever.name, len(q_norm)
             )
 
-            if configured_retriever_weight is None:
+            if configured_retriever_weight == 0.0:
                 continue
 
             result.append(

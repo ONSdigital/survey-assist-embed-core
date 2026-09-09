@@ -59,7 +59,7 @@ class WeightConfig:
                     raise ValueError(f"Query length must be positive int, got {length}")
                 _validate_retriever_weight(weight)
 
-    def get_weight(self, query_length: int | None = None) -> float | None:
+    def get_weight(self, query_length: int | None = None) -> float:
         """Get weight for this retriever at a query length.
 
         Args:
@@ -78,7 +78,7 @@ class WeightConfig:
 
         valid_lengths = [length for length in self.weights if length <= query_length]
         if not valid_lengths:
-            return None
+            return 0.0
         best_length = max(valid_lengths)
         return self.weights[best_length]
 
@@ -127,9 +127,7 @@ class WeightSpecs:
                 return spec
         return None
 
-    def get_weight(
-        self, retriever_name: str, query_length: int | None = None
-    ) -> float | None:
+    def get_weight(self, retriever_name: str, query_length: int | None = None) -> float:
         """Get weight for a specific retriever at a query length.
 
         Args:
@@ -137,16 +135,16 @@ class WeightSpecs:
             query_length: The normalized query length in characters.
 
         Returns:
-            The weight for the retriever, or None if retriever not found.
+            The weight for the retriever, or 0.0 if retriever not found.
         """
         spec = self.get_weight_spec(retriever_name)
         if spec is None:
-            return None
+            return 0.0
         return spec.get_weight(query_length)
 
     def get_normalised_weights(
         self, query_length: int | None = None
-    ) -> dict[str, float]:
+    ) -> dict[str, float] | dict[str, dict[int, float]]:
         """Get normalised weights for all retrievers at a query length.
 
         Args:
@@ -167,7 +165,7 @@ class WeightSpecs:
             }
         else:
             if query_length is not None and query_length > 0:
-                num_chars = [query_length]
+                num_chars: set[int] = {query_length}
             else:
                 num_chars = {
                     num_char
@@ -176,7 +174,9 @@ class WeightSpecs:
                     for num_char in spec.weights
                 }
 
-            weights = {spec.retriever_name: {} for spec in self.specs}
+            weights: dict[str, dict[int, float]] = {
+                spec.retriever_name: {} for spec in self.specs
+            }
             for num_char in num_chars:
                 if num_char <= 0:
                     raise ValueError(
@@ -186,7 +186,7 @@ class WeightSpecs:
                 total_weight = sum(
                     spec.get_weight(num_char)
                     for spec in self.specs
-                    if spec.get_weight(num_char)
+                    if spec.get_weight(num_char) > 0
                 )
                 if total_weight <= 0:
                     raise ValueError(
@@ -194,9 +194,8 @@ class WeightSpecs:
                     )
                 for spec in self.specs:
                     weight = spec.get_weight(num_char)
-                    if weight is None:
+                    if weight <= 0:
                         continue
-                    _validate_retriever_weight(weight)
                     weights[spec.retriever_name][num_char] = weight / total_weight
 
             return weights
