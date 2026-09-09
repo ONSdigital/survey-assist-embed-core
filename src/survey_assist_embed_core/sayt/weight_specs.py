@@ -163,42 +163,40 @@ class WeightSpecs:
                 for spec in self.specs
                 if spec.get_weight() > 0
             }
+
+        if query_length is not None and query_length > 0:
+            num_chars: set[int] = {query_length}
         else:
-            if query_length is not None and query_length > 0:
-                num_chars: set[int] = {query_length}
-            else:
-                num_chars = {
-                    num_char
-                    for spec in self.specs
-                    if isinstance(spec.weights, dict)
-                    for num_char in spec.weights
-                }
-
-            weights: dict[str, dict[int, float]] = {
-                spec.retriever_name: {} for spec in self.specs
+            num_chars = {
+                num_char
+                for spec in self.specs
+                if isinstance(spec.weights, dict)
+                for num_char in spec.weights
             }
-            for num_char in num_chars:
-                if num_char <= 0:
-                    raise ValueError(
-                        f"Query length must be positive int, got {num_char}"
-                    )
 
-                total_weight = sum(
-                    spec.get_weight(num_char)
-                    for spec in self.specs
-                    if spec.get_weight(num_char) > 0
+        weights: dict[str, dict[int, float]] = {
+            spec.retriever_name: {} for spec in self.specs
+        }
+        for num_char in num_chars:
+            if num_char <= 0:
+                raise ValueError(f"Query length must be positive int, got {num_char}")
+
+            total_weight = sum(
+                spec.get_weight(num_char)
+                for spec in self.specs
+                if spec.get_weight(num_char) > 0
+            )
+            if total_weight <= 0:
+                raise ValueError(
+                    f"Total weight cannot be zero for query length {num_char}"
                 )
-                if total_weight <= 0:
-                    raise ValueError(
-                        f"Total weight cannot be zero for query length {num_char}"
-                    )
-                for spec in self.specs:
-                    weight = spec.get_weight(num_char)
-                    if weight <= 0:
-                        continue
-                    weights[spec.retriever_name][num_char] = weight / total_weight
+            for spec in self.specs:
+                weight = spec.get_weight(num_char)
+                if weight <= 0:
+                    continue
+                weights[spec.retriever_name][num_char] = weight / total_weight
 
-            return weights
+        return weights
 
 
 def default_weight_specs() -> WeightSpecs:
