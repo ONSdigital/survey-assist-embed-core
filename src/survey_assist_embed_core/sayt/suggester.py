@@ -36,6 +36,7 @@ from survey_assist_embed_core.sayt.storage import (
     read_artifact_corpus,
     read_artifact_manifest,
 )
+from survey_assist_embed_core.sayt.weight_specs import WeightSpecs
 
 logger = get_logger(__name__)
 
@@ -104,6 +105,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
         retrievers: Sequence[RetrieverSpec] | None = None,
+        weights: WeightSpecs | None = None,
         min_chars: int = 4,
         max_suggestions: int = 10,
     ) -> None:
@@ -114,6 +116,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 pairs.
             retrievers: Optional retriever specifications. When omitted, the
                 standard prefix, n-gram, and semantic spec set is used.
+            weights: Optional retriever weight specifications. When omitted, the
+                standard prefix, n-gram, and semantic weight set is used.
             min_chars: Minimum query length before retrieval runs.
             max_suggestions: Default maximum number of ranked suggestions to
                 return.
@@ -121,12 +125,15 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         super().__init__(
             corpus,
             retrievers=retrievers,
+            weights=weights,
             min_chars=min_chars,
             max_suggestions=max_suggestions,
         )
         self._retrievers = self._build_retrievers(self._retriever_specs)
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
+        self._weights = _normalised_weight_specs(self._weight_specs)
+
         logger.info(
             "SAYT suggester initialised",
             corpus_size=self._corpus.size,
@@ -257,14 +264,30 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         return [Suggestion(display_text=k, score=v) for k, v in combined_scores.items()]
 
     def _collect_retriever_results(
-        self, q_norm: str, num_suggestions: int
+        self,
+        q_norm: str,
+        num_suggestions: int,
+        weights: WeightSpecs | None = None,
     ) -> list[tuple[float, list[Suggestion]]]:
         result = []
+        if weights is not None:
+            weight_specs = _normalised_weight_specs(weights, query_length=len(q_norm))
+        else:
+            weight_specs = self._weights
+
         for configured_retriever in self._retrievers:
             start_time = time.time()
+
+            configured_retriever_weight = weight_specs.get_weight(
+                configured_retriever.name, len(q_norm)
+            )
+
+            if configured_retriever_weight == 0.0:
+                continue
+
             result.append(
                 (
-                    configured_retriever.weight,
+                    configured_retriever_weight,
                     configured_retriever.retriever.suggest_with_scores(
                         q_norm,
                         num_suggestions=num_suggestions,
@@ -278,12 +301,16 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 query_time_ms=elapsed_time * 1000,
                 num_suggestions_requested=num_suggestions,
                 num_suggestions_returned=len(result[-1][1]),
+                retriever_weight_for_scores=result[-1][0],
             )
 
         return result
 
     def suggest_with_scores(
-        self, query: str | None, num_suggestions: int | None = None
+        self,
+        query: str | None,
+        num_suggestions: int | None = None,
+        weights: WeightSpecs | None = None,
     ) -> list[Suggestion]:
         """Return ranked suggestions and their combined scores.
 
@@ -291,6 +318,10 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             query: Raw user query text.
             num_suggestions: Optional maximum number of ranked suggestions to
                 return. When omitted, the configured default is used.
+            weights: Optional retriever weight override. When supplied,
+                the suggester will reweight the configured retrievers for this
+                query only. The retriever order is preserved, but the weights are
+                normalised to sum to 1.0.
 
         Returns:
             A list of combined suggestions ordered by descending score. Returns
@@ -314,6 +345,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             q_norm,
             num_suggestions=num_suggestions * 5,
             # collect more to allow pairing up scores with other retrievers
+            weights=weights,
         )
 
         combined_result = self._combine_suggestions(results_by_kind)
@@ -322,7 +354,10 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         )
 
     def suggest(
-        self, query: str | None, num_suggestions: int | None = None
+        self,
+        query: str | None,
+        num_suggestions: int | None = None,
+        weights: WeightSpecs | None = None,
     ) -> list[str]:
         """Return display-text-deduplicated suggestions.
 
@@ -330,6 +365,12 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             query: Raw user query text.
             num_suggestions: Optional maximum number of display values to
                 return. When omitted, the configured default is used.
+            weights: Optional retriever weight override. When supplied,
+                the suggester will reweight the configured retrievers for this
+                query only. The retriever order is preserved, but the weights are
+                normalised to sum to 1.0. This is useful for testing or for
+                temporarily adjusting the relative influence of retrievers without
+                rebuilding the suggester.
 
         Returns:
             A list of display-text suggestions ordered by descending combined
@@ -339,7 +380,11 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
 
         if num_suggestions is None:
             num_suggestions = self._max_suggestions
-        results = self.suggest_with_scores(query, num_suggestions=num_suggestions)
+        results = self.suggest_with_scores(
+            query,
+            num_suggestions=num_suggestions,
+            weights=weights,
+        )
         elapsed_time = time.time() - start_time
         logger.debug(
             "Suggest query time (top level)",
@@ -398,6 +443,21 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             ),
         )
 
+    def update_weights(
+        self,
+        weights: WeightSpecs,
+    ) -> None:
+        """Update the retriever weights for this suggester.
+
+        Args:
+            weights: The new retriever weights to apply to this suggester.
+
+        Raises:
+            ValueError: If the provided weights are invalid or empty.
+        """
+        self._weight_specs = weights
+        self._weights = _normalised_weight_specs(self._weight_specs)
+
 
 def _normalised_retriever_specs(
     retriever_specs: Sequence[RetrieverSpec],
@@ -417,6 +477,23 @@ def _normalised_retriever_specs(
 
     total_weight = sum(weight for _, weight in validated_specs)
     return [(spec, weight / total_weight) for spec, weight in validated_specs]
+
+
+def _normalised_weight_specs(
+    weight_specs: WeightSpecs,
+    query_length: int | None = None,
+) -> WeightSpecs:
+    if not weight_specs.specs:
+        raise ValueError("At least one retriever weight must be configured")
+
+    weights_dict = weight_specs.get_normalised_weights(query_length=query_length)
+    updated_specs = []
+    for spec in weight_specs.specs:
+        if spec.retriever_name in weights_dict:
+            spec_type = type(spec)
+            updated_specs.append(spec_type(weights=weights_dict[spec.retriever_name]))
+
+    return WeightSpecs(specs=updated_specs)
 
 
 def _load_retrievers_from_artifact(
