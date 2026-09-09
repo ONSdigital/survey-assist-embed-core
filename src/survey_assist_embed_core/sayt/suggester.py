@@ -132,7 +132,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self._retrievers = self._build_retrievers(self._retriever_specs)
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
-        self._weights = _normalised_weight_specs(self._weights)
+        self._weights = _normalised_weight_specs(self._weight_specs)
 
         logger.info(
             "SAYT suggester initialised",

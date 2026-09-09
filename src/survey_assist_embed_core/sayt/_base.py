@@ -41,7 +41,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         self._retriever_specs = tuple(
             default_retriever_specs() if retrievers is None else retrievers
         )
-        self._weights = default_weight_specs() if weights is None else weights
+        self._weight_specs = default_weight_specs() if weights is None else weights
 
     @classmethod
     def from_csv[  # pylint: disable=too-many-arguments  # noqa: PLR0913
