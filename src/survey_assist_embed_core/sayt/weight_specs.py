@@ -73,6 +73,9 @@ class WeightConfig:
         if isinstance(self.weights, (int, float)):
             return float(self.weights)
 
+        if query_length is None:
+            raise ValueError("query_length must be provided for dict weights")
+
         valid_lengths = [length for length in self.weights if length <= query_length]
         if not valid_lengths:
             return None
@@ -185,6 +188,10 @@ class WeightSpecs:
                     for spec in self.specs
                     if spec.get_weight(num_char)
                 )
+                if total_weight <= 0:
+                    raise ValueError(
+                        f"Total weight cannot be zero for query length {num_char}"
+                    )
                 for spec in self.specs:
                     weight = spec.get_weight(num_char)
                     if weight is None:
