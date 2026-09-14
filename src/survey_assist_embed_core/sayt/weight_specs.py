@@ -33,8 +33,8 @@ class RetrieverWeightSpec(Protocol):
 
 
 def _validate_retriever_weight(weight: float) -> None:
-    if not math.isfinite(weight) or weight <= 0:
-        raise ValueError("retriever weight must be a finite value > 0")
+    if not math.isfinite(weight) or weight < 0:
+        raise ValueError("retriever weight must be a finite value >= 0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,8 +198,6 @@ class WeightSpecs:
                 )
             for spec in self.specs:
                 weight = spec.get_weight(num_char)
-                if weight <= 0:
-                    continue
                 weights[spec.retriever_name][num_char] = weight / total_weight
 
         return weights
