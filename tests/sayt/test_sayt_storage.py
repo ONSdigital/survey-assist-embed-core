@@ -212,8 +212,8 @@ def test_empty_weight_specs_round_trip_through_storage():
     payload = storage._serialise_weight_specs(original)
     restored = storage._deserialise_weight_specs(payload)
 
-    assert payload == []
-    assert restored.specs == []
+    assert not payload
+    assert not restored.specs
 
 
 def test_all_weight_spec_types_round_trip_through_storage():
