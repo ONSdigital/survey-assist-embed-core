@@ -164,9 +164,9 @@ class WeightSpecs:
                 if spec.get_weight() > 0
             }
 
-        num_chars = set()
+        num_chars: set[int] = set()
         if query_length is not None and query_length > 0:
-            num_chars: set[int] = {query_length}
+            num_chars.add(query_length)
         else:
             if any(isinstance(spec.weights, (int, float)) for spec in self.specs):
                 num_chars.add(1)
