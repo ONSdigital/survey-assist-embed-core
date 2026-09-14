@@ -5,7 +5,7 @@
 
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
@@ -28,6 +28,30 @@ from survey_assist_embed_core.sayt.weight_specs import (
     PrefixWeightSpec,
     WeightSpecs,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _CustomWeightSpec:
+    """Weight spec for the custom retriever configuration tests."""
+
+    weights: float = 1.0
+    retriever_name: str = field(init=False, default="custom")
+
+    def get_weight(self, query_length: int | None = None) -> float:
+        _ = query_length
+        return self.weights
+
+
+@dataclass(frozen=True, slots=True)
+class _SlotsOnlyWeightSpec:
+    """Weight spec for the slots-only retriever configuration test."""
+
+    weights: float = 1.0
+    retriever_name: str = field(init=False, default="slots-only")
+
+    def get_weight(self, query_length: int | None = None) -> float:
+        _ = query_length
+        return self.weights
 
 
 def test_constructor_rejects_unknown_kwargs(small_corpus):
@@ -149,6 +173,7 @@ def test_from_csv_builds_and_suggests(tmp_path, small_corpus):
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
         max_suggestions=10,
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     )
 
     assert suggester.suggest("car")[0].startswith("Car")
@@ -164,6 +189,7 @@ def test_from_csv_uses_search_column_as_default_display(tmp_path, small_corpus):
         search_text_col="search",
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     )
 
     assert suggester.suggest("car")[0] == "Car wash"
@@ -266,6 +292,7 @@ def test_get_config_returns_rich_runtime_summary(small_corpus):
             PrefixRetrieverSpec(weight=2.0),
             NgramRetrieverSpec(weight=1.0, n=4, max_df=1.0),
         ],
+        weights=WeightSpecs(specs=[PrefixWeightSpec(), NgramWeightSpec()]),
     )
 
     config = suggester.get_config()
@@ -313,6 +340,7 @@ def test_get_config_supports_custom_specs_without_artifact_handlers(small_corpus
         small_corpus,
         min_chars=3,
         retrievers=[_CustomSpec(trigger="groom")],
+        weights=WeightSpecs(specs=[_CustomWeightSpec()]),
     ).get_config()
 
     assert config.retrievers[0].config == {"trigger": "groom"}
@@ -350,6 +378,7 @@ def test_get_config_serialises_nested_custom_spec_values(small_corpus):
         small_corpus,
         min_chars=3,
         retrievers=[_CustomSpec()],
+        weights=WeightSpecs(specs=[_CustomWeightSpec()]),
     ).get_config()
 
     assert config.retrievers[0].config == {
@@ -386,6 +415,7 @@ def test_get_config_returns_empty_config_for_slots_only_custom_spec(small_corpus
         small_corpus,
         min_chars=3,
         retrievers=[_SlotsOnlySpec(trigger="groom")],
+        weights=WeightSpecs(specs=[_SlotsOnlyWeightSpec()]),
     ).get_config()
 
     assert config.retrievers[0].config == {}
@@ -789,7 +819,7 @@ def test_suggester_defaults_to_standard_retriever_specs(monkeypatch, small_corpu
 def test_constructor_rejects_empty_retriever_list(small_corpus):
     """Reject suggester construction without any retriever specs."""
     with pytest.raises(ValueError, match="At least one retriever"):
-        SAYTSuggester(small_corpus, retrievers=[])
+        SAYTSuggester(small_corpus, retrievers=[], weights=WeightSpecs(specs=[]))
 
 
 def test_constructor_rejects_invalid_custom_retriever_weight(small_corpus):
@@ -827,6 +857,15 @@ def test_constructor_rejects_invalid_custom_retriever_weight(small_corpus):
             build_calls.append((corpus, min_chars))
             return _StubRetriever()
 
+    @dataclass(frozen=True, slots=True)
+    class _NamedWeightSpec:
+        retriever_name: str
+        weights: float = 1.0
+
+        def get_weight(self, query_length: int | None = None) -> float:
+            _ = query_length
+            return self.weights
+
     with pytest.raises(
         ValueError,
         match="Retriever 'negative' weight must be a finite value > 0",
@@ -834,6 +873,12 @@ def test_constructor_rejects_invalid_custom_retriever_weight(small_corpus):
         SAYTSuggester(
             small_corpus,
             retrievers=[_StubRetrieverSpec(), _NegativeStubRetrieverSpec()],
+            weights=WeightSpecs(
+                specs=[
+                    _NamedWeightSpec("stub"),
+                    _NamedWeightSpec("negative"),
+                ]
+            ),
         )
 
     with pytest.raises(
@@ -843,6 +888,12 @@ def test_constructor_rejects_invalid_custom_retriever_weight(small_corpus):
         SAYTSuggester(
             small_corpus,
             retrievers=[_StubRetrieverSpec(), _NanStubRetrieverSpec()],
+            weights=WeightSpecs(
+                specs=[
+                    _NamedWeightSpec("stub"),
+                    _NamedWeightSpec("nan"),
+                ]
+            ),
         )
 
     assert not build_calls

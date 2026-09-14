@@ -55,6 +55,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         retrievers: Sequence[RetrieverSpec] | None = None,
         min_chars: int = 4,
         max_suggestions: int = 10,
+        weights: WeightSpecs | None = None,
     ) -> CorpusBoundT:
         """Build a corpus-bound SAYT object from CSV input."""
         corpus_rows = load_corpus_from_csv(
@@ -65,6 +66,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         return cls(
             corpus_rows,
             retrievers=retrievers,
+            weights=weights,
             min_chars=min_chars,
             max_suggestions=max_suggestions,
         )
