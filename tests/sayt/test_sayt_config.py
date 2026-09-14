@@ -13,6 +13,11 @@ from survey_assist_embed_core.sayt import (
     default_retriever_specs,
 )
 from survey_assist_embed_core.sayt.core import CleanCorpus
+from survey_assist_embed_core.sayt.weight_specs import (
+    NgramWeightSpec,
+    PrefixWeightSpec,
+    WeightSpecs,
+)
 
 
 @pytest.mark.parametrize(
@@ -140,6 +145,75 @@ def test_retriever_specs_keep_their_config():
     assert spec.weight == pytest.approx(2.0)
     assert spec.n == n
     assert spec.max_df == pytest.approx(max_df)
+
+
+def test_suggester_warns_when_weight_names_do_not_match_retrievers(small_corpus):
+    """Warn during construction when retriever and weight names differ."""
+    with pytest.warns(RuntimeWarning) as warning_records:
+        SAYTSuggester(
+            small_corpus,
+            min_chars=3,
+            retrievers=[PrefixRetrieverSpec()],
+            weights=WeightSpecs(specs=[NgramWeightSpec()]),
+        )
+
+    warning_messages = [str(record.message) for record in warning_records]
+    assert any(
+        "No weight spec configured for retrievers: prefix" in message
+        for message in warning_messages
+    )
+    assert any(
+        "Weight specs configured for unknown retrievers: ngram" in message
+        for message in warning_messages
+    )
+
+
+def test_update_weights_warns_when_weight_names_do_not_match(small_corpus):
+    """Warn when replacing weights with names unknown to the suggester."""
+    suggester = SAYTSuggester(
+        small_corpus,
+        min_chars=3,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    )
+
+    with pytest.warns(
+        RuntimeWarning,
+        match="Weight specs configured for unknown retrievers: ngram",
+    ):
+        suggester.update_weights(
+            WeightSpecs(specs=[PrefixWeightSpec(), NgramWeightSpec()])
+        )
+
+
+def test_suggester_warns_when_weight_names_are_duplicate(small_corpus):
+    """Capture duplicate weight-spec warnings during construction."""
+    with pytest.warns(
+        RuntimeWarning,
+        match="Duplicate retriever weight specs found for: prefix",
+    ):
+        SAYTSuggester(
+            small_corpus,
+            min_chars=3,
+            retrievers=[PrefixRetrieverSpec()],
+            weights=WeightSpecs(specs=[PrefixWeightSpec(), PrefixWeightSpec()]),
+        )
+
+
+def test_update_weights_warns_when_retriever_weight_is_missing(small_corpus):
+    """Capture missing weight-spec warnings during an update."""
+    suggester = SAYTSuggester(
+        small_corpus,
+        min_chars=3,
+        retrievers=[PrefixRetrieverSpec(), NgramRetrieverSpec(max_df=1.0)],
+        weights=WeightSpecs(specs=[PrefixWeightSpec(), NgramWeightSpec()]),
+    )
+
+    with pytest.warns(
+        RuntimeWarning,
+        match="No weight spec configured for retrievers: ngram",
+    ):
+        suggester.update_weights(WeightSpecs(specs=[PrefixWeightSpec()]))
 
 
 def test_semantic_retriever_spec_builds_semantic_retriever(monkeypatch):
