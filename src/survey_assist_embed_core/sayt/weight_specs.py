@@ -56,7 +56,9 @@ class WeightConfig:
         else:
             for length, weight in self.weights.items():
                 if not isinstance(length, int) or length <= 0:
-                    raise ValueError(f"Query length must be positive int, got {length}")
+                    raise ValueError(
+                        f"Query length must be 0 or a positive int, got {length}"
+                    )
                 _validate_retriever_weight(weight)
 
     def get_weight(self, query_length: int | None = None) -> float:
