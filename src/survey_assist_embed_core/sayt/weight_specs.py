@@ -164,15 +164,21 @@ class WeightSpecs:
                 if spec.get_weight() > 0
             }
 
+        num_chars = set()
         if query_length is not None and query_length > 0:
             num_chars: set[int] = {query_length}
         else:
-            num_chars = {
-                num_char
-                for spec in self.specs
-                if isinstance(spec.weights, dict)
-                for num_char in spec.weights
-            }
+            if any(isinstance(spec.weights, (int, float)) for spec in self.specs):
+                num_chars.add(1)
+
+            num_chars.update(
+                [
+                    num_char
+                    for spec in self.specs
+                    if isinstance(spec.weights, dict)
+                    for num_char in spec.weights
+                ]
+            )
 
         weights: dict[str, dict[int, float]] = {
             spec.retriever_name: {} for spec in self.specs
