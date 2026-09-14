@@ -4,7 +4,6 @@ import csv
 import json
 import os
 import shutil
-from collections.abc import Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 
@@ -383,7 +382,7 @@ def _deserialise_weight_specs(payload: list[object]) -> WeightSpecs:
     if not isinstance(payload, list):
         raise ValueError("Weight specs payload must be a list")
 
-    specs: Sequence[WeightConfig] = []
+    specs: list[WeightConfig] = []
     for item in payload:
         if not isinstance(item, dict):
             raise ValueError("Each weight spec item must be a dictionary")
