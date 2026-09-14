@@ -365,7 +365,7 @@ def _deserialise_stored_retriever(payload: dict[str, object]) -> StoredRetriever
 
 def _serialise_weight_specs(weight_specs: WeightSpecs) -> list[dict[str, object]]:
     """Serialize WeightSpecs to a list of dictionaries."""
-    serialized = []
+    serialized: list[dict[str, object]] = []
     for spec in weight_specs.specs:
         serialized.append(
             {
