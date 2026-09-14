@@ -92,6 +92,7 @@ def test_read_artifact_inputs_validate_missing_and_malformed_state(tmp_path):
                 "corpus_file": "corpus.csv",
                 "corpus_size": 1,
                 "retrievers": [],
+                "weights": [{"type": "prefix", "weights": 1}],
             }
         ),
         encoding="utf-8",

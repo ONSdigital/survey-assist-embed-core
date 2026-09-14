@@ -152,6 +152,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         retriever_specs: Sequence[RetrieverSpec],
         retrievers: list[_ConfiguredRetriever],
         stored_retrievers: Sequence[StoredRetrieverSpec] | None = None,
+        weight_specs: WeightSpecs,
+        weights: WeightSpecs,
         artifact_provenance: SaytArtifactProvenance | None = None,
     ) -> "SAYTSuggester":
         """Construct a suggester from already-validated runtime state."""
@@ -164,6 +166,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         suggester._stored_retrievers = (
             tuple(stored_retrievers) if stored_retrievers is not None else None
         )
+        suggester._weight_specs = weight_specs
+        suggester._weights = weights
         suggester._artifact_provenance = artifact_provenance
         return suggester
 
@@ -186,6 +190,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             stored_retrievers=manifest.retrievers,
             artifact_dir=artifact_path,
         )
+
+        weights = _normalised_weight_specs(manifest.weight_specs)
+
         artifact_provenance = SaytArtifactProvenance(
             artifact_dir=str(artifact_path),
             artifact_type=SAYT_ARTIFACT_TYPE,
@@ -202,6 +209,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             ],
             retrievers=retrievers,
             stored_retrievers=manifest.retrievers,
+            weight_specs=manifest.weight_specs,
+            weights=weights,
             artifact_provenance=artifact_provenance,
         )
 

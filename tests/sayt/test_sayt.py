@@ -23,6 +23,7 @@ from survey_assist_embed_core.sayt.core import (
     Suggestion,
 )
 from survey_assist_embed_core.sayt.suggester import SAYTSuggester
+from survey_assist_embed_core.sayt.weight_specs import PrefixWeightSpec, WeightSpecs
 
 
 def test_constructor_rejects_unknown_kwargs(small_corpus):
@@ -201,6 +202,7 @@ def test_from_artifact_restores_prefix_suggester(tmp_path, small_corpus):
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
         max_suggestions=5,
+        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=1.0)]),
     ).build_artifact(tmp_path / "artifact")
 
     restored = SAYTSuggester.from_artifact(artifact_dir)
@@ -474,10 +476,19 @@ def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
         def build(self, corpus, *, min_chars):
             return _StubRetriever(corpus.rows[0])
 
+    @dataclass(frozen=True, slots=True)
+    class _StubWeightSpec:
+        weights: float = 1.0
+        retriever_name: str = "stub"
+
+        def get_weight(self, query_length: int | None = None) -> float:
+            return self.weights
+
     suggester = SAYTSuggester(
         small_corpus,
         min_chars=3,
         retrievers=[_StubRetrieverSpec()],
+        weights=WeightSpecs(specs=[_StubWeightSpec()]),
     )
 
     results = suggester.suggest_with_scores("car")

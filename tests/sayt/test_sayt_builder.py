@@ -20,6 +20,7 @@ from survey_assist_embed_core.sayt import (
 from survey_assist_embed_core.sayt.builder import _remove_path
 from survey_assist_embed_core.sayt.core import CleanCorpus
 from survey_assist_embed_core.sayt.suggester import SAYTSuggester
+from survey_assist_embed_core.sayt.weight_specs import PrefixWeightSpec, WeightSpecs
 
 
 class _CustomRetrieverSpec:
@@ -120,6 +121,7 @@ def test_builder_writes_manifest_and_corpus(tmp_path, small_corpus):
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
         max_suggestions=5,
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     ).build_artifact(artifact_dir)
 
     manifest = json.loads((artifact_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -137,6 +139,7 @@ def test_builder_writes_manifest_and_corpus(tmp_path, small_corpus):
         "retrievers": [
             {"type": "prefix", "weight": 1.0, "path": None, "config": {}},
         ],
+        "weight_specs": [{"retriever_name": "prefix", "weights": 1.0}],
     }
     assert rows == [
         {
