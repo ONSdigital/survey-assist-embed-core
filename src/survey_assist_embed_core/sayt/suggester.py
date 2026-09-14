@@ -129,6 +129,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             min_chars=min_chars,
             max_suggestions=max_suggestions,
         )
+        self._weight_specs.warn_for_retriever_names(
+            [spec.name for spec in self._retriever_specs]
+        )
         self._retrievers = self._build_retrievers(self._retriever_specs)
         self._stored_retrievers: tuple[StoredRetrieverSpec, ...] | None = None
         self._artifact_provenance: SaytArtifactProvenance | None = None
@@ -169,6 +172,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         suggester._weight_specs = weight_specs
         suggester._weights = weights
         suggester._artifact_provenance = artifact_provenance
+        weight_specs.warn_for_retriever_names(
+            [spec.name for spec in suggester._retriever_specs]
+        )
         return suggester
 
     @classmethod
@@ -464,6 +470,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         Raises:
             ValueError: If the provided weights are invalid or empty.
         """
+        weights.warn_for_retriever_names([spec.name for spec in self._retriever_specs])
         self._weight_specs = weights
         self._weights = _normalised_weight_specs(self._weight_specs)
 

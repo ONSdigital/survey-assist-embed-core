@@ -1,6 +1,7 @@
 """Weight specification for retriever combination."""
 
 import math
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -114,6 +115,44 @@ class WeightSpecs:
     """Collection of weight specs as an ordered sequence."""
 
     specs: Sequence[WeightConfig] = field(default_factory=list)
+
+    def warn_for_retriever_names(self, retriever_names: Sequence[str]) -> None:
+        """Warn when retriever and weight-spec names are not aligned."""
+        configured_weight_names = [spec.retriever_name for spec in self.specs]
+        retriever_name_set = set(retriever_names)
+        weight_name_set = set(configured_weight_names)
+
+        duplicate_weight_names = sorted(
+            {
+                name
+                for name in configured_weight_names
+                if configured_weight_names.count(name) > 1
+            }
+        )
+        missing_weight_names = sorted(retriever_name_set - weight_name_set)
+        extra_weight_names = sorted(weight_name_set - retriever_name_set)
+
+        if duplicate_weight_names:
+            warnings.warn(
+                "Duplicate retriever weight specs found for: "
+                f"{', '.join(duplicate_weight_names)}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        if missing_weight_names:
+            warnings.warn(
+                "No weight spec configured for retrievers: "
+                f"{', '.join(missing_weight_names)}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        if extra_weight_names:
+            warnings.warn(
+                "Weight specs configured for unknown retrievers: "
+                f"{', '.join(extra_weight_names)}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     def get_weight_spec(self, retriever_name: str) -> WeightConfig | None:
         """Get weight spec for a specific retriever by name.
