@@ -404,7 +404,7 @@ def _deserialise_weight_specs(payload: list[object]) -> WeightSpecs:
         else:
             raise ValueError(f"Unsupported weight spec type: {spec_type}")
 
-    return WeightSpecs(specs=tuple(specs))
+    return WeightSpecs(specs=specs)
 
 
 def _coerce_int(value: object, *, field_name: str) -> int:
