@@ -485,8 +485,8 @@ def test_suggest_keeps_ties_at_cutoff(small_corpus):
     suggester = SAYTSuggester(
         small_corpus,
         min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
         weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+        retrievers=[PrefixRetrieverSpec()],
     )
 
     results = suggester.suggest("car", num_suggestions=1)
@@ -683,8 +683,8 @@ def test_per_call_empty_weights_are_rejected(small_corpus):
     suggester = SAYTSuggester(
         small_corpus,
         min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
         weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+        retrievers=[PrefixRetrieverSpec()],
     )
 
     with pytest.raises(ValueError, match="At least one retriever weight"):
