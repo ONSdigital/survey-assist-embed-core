@@ -1,6 +1,7 @@
 """Tests for SAYT weight specifications."""
 
 import math
+import warnings
 
 import pytest
 
@@ -104,6 +105,43 @@ def test_weight_specs_warn_about_name_mismatches(
     """Warn about incomplete, extra, or duplicate weight-spec names."""
     with pytest.warns(RuntimeWarning, match=warning_match):
         weight_specs.warn_for_retriever_names(retriever_names)
+
+
+def test_weight_specs_do_not_warn_when_names_match():
+    """Keep aligned retriever and weight-spec names warning-free."""
+    weight_specs = WeightSpecs(specs=[PrefixWeightSpec(), NgramWeightSpec()])
+
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        warnings.simplefilter("always")
+        weight_specs.warn_for_retriever_names(["prefix", "ngram"])
+
+    assert [
+        warning for warning in caught_warnings if warning.category is RuntimeWarning
+    ] == []
+
+
+def test_weight_specs_report_all_name_mismatches():
+    """Report duplicate, missing, and extra names together."""
+    weight_specs = WeightSpecs(
+        specs=[PrefixWeightSpec(), PrefixWeightSpec(), NgramWeightSpec()]
+    )
+
+    with pytest.warns(RuntimeWarning) as warning_records:
+        weight_specs.warn_for_retriever_names(["semantic"])
+
+    warning_messages = [str(record.message) for record in warning_records]
+    assert any(
+        "Duplicate retriever weight specs found for: prefix" in message
+        for message in warning_messages
+    )
+    assert any(
+        "No weight spec configured for retrievers: semantic" in message
+        for message in warning_messages
+    )
+    assert any(
+        "Weight specs configured for unknown retrievers: ngram, prefix" in message
+        for message in warning_messages
+    )
 
 
 @pytest.mark.parametrize("weight", [-1, float("inf"), float("-inf"), math.nan])
