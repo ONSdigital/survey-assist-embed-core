@@ -466,30 +466,16 @@ def test_suggest_respects_explicit_num_suggestions(small_corpus):
     assert len(suggester.suggest("car", num_suggestions=1)) == 4
 
 
-def test_suggest_with_scores_keeps_ties_at_cutoff(small_corpus):
+def test_suggest_with_scores_keeps_ties_at_cutoff(prefix_suggester):
     """Keep all tied scored suggestions at the public cutoff."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-    )
-
-    results = suggester.suggest_with_scores("car", num_suggestions=1)
+    results = prefix_suggester.suggest_with_scores("car", num_suggestions=1)
 
     assert len({result.display_text for result in results}) == 4
 
 
-def test_suggest_keeps_ties_at_cutoff(small_corpus):
+def test_suggest_keeps_ties_at_cutoff(prefix_suggester):
     """Keep all tied display suggestions at the public cutoff."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-        retrievers=[PrefixRetrieverSpec()],
-    )
-
-    results = suggester.suggest("car", num_suggestions=1)
+    results = prefix_suggester.suggest("car", num_suggestions=1)
 
     assert results == [
         "Car Waxing",
@@ -683,8 +669,8 @@ def test_per_call_empty_weights_are_rejected(small_corpus):
     suggester = SAYTSuggester(
         small_corpus,
         min_chars=3,
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
         retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     )
 
     with pytest.raises(ValueError, match="At least one retriever weight"):
@@ -734,17 +720,19 @@ def test_suggestion_model_dump_is_api_friendly() -> None:
     }
 
 
-def test_combine_suggestions_ignores_non_positive_score_groups(small_corpus):
+def test_combine_suggestions_ignores_non_positive_score_groups(prefix_suggester):
     """Drop a retriever group entirely when its max score is not positive."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-    )
-    combined = suggester._combine_suggestions(
+    combined = prefix_suggester._combine_suggestions(
         [
-            (1.0, [Suggestion(display_text=suggester._corpus.rows[0][1], score=0.0)]),
+            (
+                1.0,
+                [
+                    Suggestion(
+                        display_text=prefix_suggester._corpus.rows[0][1],
+                        score=0.0,
+                    )
+                ],
+            ),
             (1.0, []),
             (1.0, []),
         ]
@@ -753,18 +741,12 @@ def test_combine_suggestions_ignores_non_positive_score_groups(small_corpus):
     assert combined == []
 
 
-def test_combine_suggestions_ignores_invalid_scores(small_corpus):
+def test_combine_suggestions_ignores_invalid_scores(prefix_suggester):
     """Ignore missing row ids and keep distinct row ids in combined scores."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-    )
-    first_display = suggester._corpus.rows[0][1]
-    second_display = suggester._corpus.rows[2][1]
+    first_display = prefix_suggester._corpus.rows[0][1]
+    second_display = prefix_suggester._corpus.rows[2][1]
 
-    combined = suggester._combine_suggestions(
+    combined = prefix_suggester._combine_suggestions(
         [
             (1.0, [Suggestion(display_text=first_display, score=0.0)]),
             (
