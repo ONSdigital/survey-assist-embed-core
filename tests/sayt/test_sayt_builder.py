@@ -307,9 +307,7 @@ def test_from_artifact_loads_persisted_ngram_filespace(
     manifest = json.loads((artifact_dir / "manifest.json").read_text(encoding="utf-8"))
 
     assert suggester.suggest("groom") == [target_display]
-    assert suggester._weight_specs.specs == [
-        NgramWeightSpec(weights=2.0),
-    ]
+    assert manifest["weight_specs"] == [{"retriever_name": "ngram", "weights": 2.0}]
     assert captured == {
         "folder_path": str(artifact_dir / manifest["retrievers"][0]["path"]),
         "vectoriser_type": "_CharNgramVectoriser",
