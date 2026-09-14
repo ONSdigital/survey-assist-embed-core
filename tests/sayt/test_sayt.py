@@ -664,50 +664,31 @@ def test_zero_weight_excludes_retriever_from_public_results(small_corpus):
     assert calls == ["prefix"]
 
 
-def test_per_call_empty_weights_are_rejected(small_corpus):
+def test_per_call_empty_weights_are_rejected(prefix_suggester):
     """Reject an empty per-call weight override."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-    )
-
     with pytest.raises(ValueError, match="At least one retriever weight"):
-        suggester.suggest("car", weights=WeightSpecs(specs=[]))
+        prefix_suggester.suggest("car", weights=WeightSpecs(specs=[]))
 
 
-def test_per_call_zero_total_weights_are_rejected(small_corpus):
+def test_per_call_zero_total_weights_are_rejected(prefix_suggester):
     """Reject a per-call override whose total weight is zero."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-    )
-
     with pytest.raises(ValueError, match="Total weight cannot be zero"):
-        suggester.suggest(
+        prefix_suggester.suggest(
             "car",
             weights=WeightSpecs(specs=[PrefixWeightSpec(weights=0.0)]),
         )
 
 
 def test_update_weights_rejects_zero_total_without_replacing_current_weights(
-    small_corpus,
+    prefix_suggester,
 ):
     """Keep the active weights when an invalid update is rejected."""
-    suggester = SAYTSuggester(
-        small_corpus,
-        min_chars=3,
-        retrievers=[PrefixRetrieverSpec()],
-        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
-    )
-
     with pytest.raises(ValueError, match="Total weight cannot be zero"):
-        suggester.update_weights(WeightSpecs(specs=[PrefixWeightSpec(weights=0.0)]))
+        prefix_suggester.update_weights(
+            WeightSpecs(specs=[PrefixWeightSpec(weights=0.0)])
+        )
 
-    assert suggester.suggest("car")
+    assert prefix_suggester.suggest("car")
 
 
 def test_suggestion_model_dump_is_api_friendly() -> None:
