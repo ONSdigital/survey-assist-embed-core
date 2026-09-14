@@ -1,5 +1,7 @@
 """Shared pytest fixtures for SAYT tests."""
 
+# pylint: disable=redefined-outer-name
+
 import pytest
 
 from survey_assist_embed_core.sayt.retriever_specs import PrefixRetrieverSpec
