@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.2.4] - 2026-09-17
+
+### Changed
+
+- Moved SAYT weighting configuration into a dedicated `WeightSpecs` class, replacing the previous weight assignment within retriever specifications.
+- Updated score combination to use normalised retriever weights derived from `WeightSpecs`.
+
+### Added
+
+- Added support for query-length-dependent weighting, allowing retriever weights to vary based on input query character length.
+- Added automatic weight normalisation for both fixed and query-length-dependent weight configurations.
+- Added support for mixing fixed-weight and query-length-dependent retrievers within the same SAYT suggester.
+
 ## [0.2.3] - 2026-07-20
 
 ### Fixed
