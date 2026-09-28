@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from classifai.vectorisers import VectoriserBase
+from fastembed.common.types import Device
 
 import survey_assist_embed_core.adapters.classifai.vectoriser as vectoriser_module
 from survey_assist_embed_core.sayt import NgramRetrieverSpec, PrefixRetrieverSpec
@@ -217,6 +218,32 @@ def test_onnx_vectoriser_reuses_cached_text_embedding(monkeypatch):
 
     assert captured == ["sentence-transformers/all-MiniLM-L6-v2"]
     assert first.model is second.model
+
+
+def test_onnx_vectoriser_configures_fastembed_device(monkeypatch):
+    """Pass execution device to fastembed and cache models separately by device."""
+    captured = []
+
+    class _StubTextEmbedding:
+        def __init__(self, model_name, *, cuda=Device.AUTO):
+            captured.append((model_name, cuda))
+
+    monkeypatch.setattr(vectoriser_module, "_ONNX_MODEL_CACHE", {})
+    monkeypatch.setattr(vectoriser_module, "TextEmbedding", _StubTextEmbedding)
+
+    default = vectoriser_module.OnnxVectoriser("test-device-model")
+    cpu = vectoriser_module.OnnxVectoriser("test-device-model", device="cpu")
+    cpu_again = vectoriser_module.OnnxVectoriser("test-device-model", device="cpu")
+    cuda = vectoriser_module.OnnxVectoriser("test-device-model", device="cuda")
+
+    assert captured == [
+        ("test-device-model", Device.AUTO),
+        ("test-device-model", Device.CPU),
+        ("test-device-model", Device.CUDA),
+    ]
+    assert cpu.model is cpu_again.model
+    assert default.model is not cpu.model
+    assert cpu.model is not cuda.model
 
 
 def test_char_ngram_vectoriser_accepts_single_string_input():
