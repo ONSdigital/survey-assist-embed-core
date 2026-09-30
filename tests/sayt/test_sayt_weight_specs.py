@@ -178,7 +178,7 @@ def test_integer_fixed_weight_is_supported():
     integer_weight = 2
     spec = PrefixWeightSpec(weights=integer_weight)
 
-    assert type(spec.weights) is float
+    assert isinstance(spec.weights, float)
     assert spec.weights == float(integer_weight)
     assert spec.get_weight(4) == pytest.approx(float(integer_weight))
 
@@ -188,7 +188,7 @@ def test_integer_dict_weights_are_converted_to_float():
     expected_weight = 2.0
     spec = PrefixWeightSpec(weights={1: 2})
 
-    assert type(spec.weights[1]) is float
+    assert isinstance(spec.weights[1], float)
     assert spec.weights[1] == expected_weight
 
 
