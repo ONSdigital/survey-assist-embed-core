@@ -19,7 +19,7 @@ class RetrieverWeightSpec(Protocol):
         """Name of the retriever this weight applies to."""
 
     @property
-    def weights(self) -> int | float | dict[int, float]:
+    def weights(self) -> int | float | dict[int, float | int]:
         """Raw weight configuration (fixed number or query-length-specific)."""
 
     def get_weight(self, query_length: int) -> float:
@@ -33,7 +33,7 @@ class RetrieverWeightSpec(Protocol):
         """
 
 
-def _validate_weights(weights: int | float | dict[int, float]) -> None:
+def _validate_weights(weights: int | float | dict[int, float | int]) -> None:
     """Validate a single weight for a retriever."""
     if isinstance(weights, (int, float)):
         if not math.isfinite(weights) or weights < 0:
@@ -57,12 +57,22 @@ class WeightConfig:
     - A dict[int, float]: query-length-specific weights using nearest lower bound
     """
 
-    weights: int | float | dict[int, float] = 1.0
+    weights: int | float | dict[int, float | int] = 1.0
     retriever_name: str = field(init=False)
 
     def __post_init__(self) -> None:
         """Validate weights."""
         _validate_weights(self.weights)
+
+        if isinstance(self.weights, (int, float)):
+            object.__setattr__(self, "weights", float(self.weights))
+        else:
+            # Convert all int weights in the dict to float
+            object.__setattr__(
+                self,
+                "weights",
+                {length: float(weight) for length, weight in self.weights.items()},
+            )
 
     def get_weight(self, query_length: int | None = None) -> float:
         """Get weight for this retriever at a query length.
@@ -93,7 +103,7 @@ class PrefixWeightSpec(WeightConfig):
     """Weight configuration for prefix retriever."""
 
     retriever_name: str = field(init=False, default="prefix")
-    weights: int | float | dict[int, float] = field(default=1.0)
+    weights: int | float | dict[int, float | int] = field(default=1.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +111,7 @@ class NgramWeightSpec(WeightConfig):
     """Weight configuration for n-gram retriever."""
 
     retriever_name: str = field(init=False, default="ngram")
-    weights: int | float | dict[int, float] = field(default=1.0)
+    weights: int | float | dict[int, float | int] = field(default=1.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +119,7 @@ class SemanticWeightSpec(WeightConfig):
     """Weight configuration for semantic retriever."""
 
     retriever_name: str = field(init=False, default="semantic")
-    weights: int | float | dict[int, float] = field(default=1.0)
+    weights: int | float | dict[int, float | int] = field(default=1.0)
 
 
 @dataclass(frozen=True, slots=True)

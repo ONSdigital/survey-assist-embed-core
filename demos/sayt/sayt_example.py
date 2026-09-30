@@ -36,7 +36,7 @@ weights: WeightSpecs = WeightSpecs(
     specs=[
         PrefixWeightSpec(),
         NgramWeightSpec(weights=2),
-        SemanticWeightSpec(weights={4: 2.0, 6: 3.0}),
+        SemanticWeightSpec(weights={4: 2, 6: 3.0}),
     ]
 )
 

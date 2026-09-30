@@ -178,8 +178,18 @@ def test_integer_fixed_weight_is_supported():
     integer_weight = 2
     spec = PrefixWeightSpec(weights=integer_weight)
 
-    assert spec.weights == integer_weight
+    assert type(spec.weights) is float
+    assert spec.weights == float(integer_weight)
     assert spec.get_weight(4) == pytest.approx(float(integer_weight))
+
+
+def test_integer_dict_weights_are_converted_to_float():
+    """Normalize integer values in query-length-specific weights."""
+    expected_weight = 2.0
+    spec = PrefixWeightSpec(weights={1: 2})
+
+    assert type(spec.weights[1]) is float
+    assert spec.weights[1] == expected_weight
 
 
 def test_dict_weight_uses_nearest_lower_query_length():
@@ -316,7 +326,7 @@ def test_normalisation_rejects_non_positive_query_length_state_in_weight_config(
     """Reject malformed query-length state during normalisation."""
     weights = {1: 1.0}
     spec = PrefixWeightSpec(weights=weights)
-    weights[0] = 1.0
+    spec.weights[0] = 0.0
 
     with pytest.raises(
         ValueError,
