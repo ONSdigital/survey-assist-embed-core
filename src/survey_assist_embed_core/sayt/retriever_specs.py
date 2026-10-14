@@ -272,6 +272,11 @@ class SemanticRetrieverSpec:
         Returns:
             A configured ``SemanticRetriever``.
         """
+        if self.model == "nomic-ai/nomic-embed-text-v1.5":
+            corpus_nomic = [
+                (f"search_document: {text}", display) for text, display in corpus.rows
+            ]
+            corpus = CleanCorpus(rows=corpus_nomic)
         if filespace_path is None:
             return SemanticRetriever(
                 corpus,

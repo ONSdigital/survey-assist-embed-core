@@ -260,13 +260,24 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self, q_norm: str, num_suggestions: int
     ) -> list[tuple[float, list[Suggestion]]]:
         result = []
+
+        if any(
+            spec.name == "semantic" and spec.model == "nomic-ai/nomic-embed-text-v1.5"
+            for spec in self._retriever_specs
+        ):
+            semantic_query_text_addition = "search_query: "
+        else:
+            semantic_query_text_addition = ""
+
         for configured_retriever in self._retrievers:
             start_time = time.time()
             result.append(
                 (
                     configured_retriever.weight,
                     configured_retriever.retriever.suggest_with_scores(
-                        q_norm,
+                        f"{semantic_query_text_addition}{q_norm}"
+                        if configured_retriever.name == "semantic"
+                        else q_norm,
                         num_suggestions=num_suggestions,
                     ),
                 )
