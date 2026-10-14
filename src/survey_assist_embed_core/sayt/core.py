@@ -4,7 +4,7 @@
 
 import re
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -246,7 +246,7 @@ class SaytWeightSpecsSummary(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    specs: Sequence[SaytWeightConfigSummary] = Field(default_factory=list)
+    specs: list[SaytWeightConfigSummary] = Field(default_factory=list)
 
 
 class SaytConfiguration(BaseModel):
