@@ -518,9 +518,9 @@ def _normalised_weight_specs(
         ValueError: If no configured weight spec matches an active retriever
             or the active weights have no positive total.
     """
-    active_specs = tuple(
+    active_specs = [
         spec for spec in weight_specs.specs if spec.retriever_name in retriever_names
-    )
+    ]
 
     if not active_specs:
         raise ValueError("At least one active retriever weight must be configured")
