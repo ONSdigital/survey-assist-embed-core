@@ -2,7 +2,6 @@
 
 import math
 import warnings
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -124,11 +123,11 @@ class SemanticWeightSpec(WeightConfig):
 
 @dataclass(frozen=True, slots=True)
 class WeightSpecs:
-    """Collection of weight specs as an ordered sequence."""
+    """Collection of weight specs as an ordered list."""
 
-    specs: Sequence[WeightConfig] = field(default_factory=list)
+    specs: list[WeightConfig] = field(default_factory=list)
 
-    def warn_for_retriever_names(self, retriever_names: Sequence[str]) -> None:
+    def warn_for_retriever_names(self, retriever_names: list[str]) -> None:
         """Warn when retriever and weight-spec names are not aligned."""
         configured_weight_names = [spec.retriever_name for spec in self.specs]
         retriever_name_set = set(retriever_names)
