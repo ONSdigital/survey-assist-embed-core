@@ -27,7 +27,10 @@ from survey_assist_embed_core.sayt.core import (
     _normalise,
     take_with_ties,
 )
-from survey_assist_embed_core.sayt.retriever_specs import Retriever, RetrieverSpec
+from survey_assist_embed_core.sayt.retriever_specs import (
+    Retriever,
+    RetrieverSpec,
+)
 from survey_assist_embed_core.sayt.storage import (
     SAYT_ARTIFACT_TYPE,
     SAYT_ARTIFACT_VERSION,
@@ -261,13 +264,14 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
     ) -> list[tuple[float, list[Suggestion]]]:
         result = []
 
-        if any(
-            spec.name == "semantic" and spec.model == "nomic-ai/nomic-embed-text-v1.5"
-            for spec in self._retriever_specs
-        ):
-            semantic_query_text_addition = "search_query: "
-        else:
-            semantic_query_text_addition = ""
+        # if any(
+        #     isinstance(spec, SemanticRetrieverSpec)
+        #     and spec.model == "nomic-ai/nomic-embed-text-v1.5"
+        #     for spec in self._retriever_specs
+        # ):
+        #     semantic_query_text_addition = "search_query: "
+        # else:
+        semantic_query_text_addition = ""
 
         for configured_retriever in self._retrievers:
             start_time = time.time()

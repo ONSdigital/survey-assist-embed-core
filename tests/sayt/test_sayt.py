@@ -16,6 +16,7 @@ from survey_assist_embed_core.sayt import (
     PrefixRetrieverSpec,
     SAYTBuilder,
     SaytConfiguration,
+    SemanticRetrieverSpec,
 )
 from survey_assist_embed_core.sayt.core import (
     CleanCorpus,
@@ -484,6 +485,49 @@ def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
 
     assert semantic_calls == [("car", 50)]
     assert [result.display_text for result in results] == [suggester._corpus.rows[0][1]]
+
+
+def test_nomic_query_prefix_only_applies_to_nomic_semantic_spec(
+    monkeypatch, small_corpus
+):
+    """Prefix Nomic queries without requiring a model on other retriever specs."""
+    calls = []
+
+    class _StubRetriever:
+        def suggest_with_scores(self, q_norm, num_suggestions):
+            calls.append(q_norm)
+            return []
+
+    @dataclass(frozen=True, slots=True)
+    class _CustomSemanticSpec:
+        name: str = "semantic"
+        weight: float = 1.0
+
+        def build(self, corpus, *, min_chars):
+            return _StubRetriever()
+
+    monkeypatch.setattr(
+        SemanticRetrieverSpec,
+        "build",
+        lambda self, corpus, *, min_chars: _StubRetriever(),
+    )
+
+    suggester = SAYTSuggester(
+        small_corpus,
+        min_chars=3,
+        retrievers=[PrefixRetrieverSpec(), _CustomSemanticSpec()],
+    )
+    suggester.suggest_with_scores("Car Wash")
+    assert calls == ["car wash"]
+
+    calls.clear()
+    suggester = SAYTSuggester(
+        small_corpus,
+        min_chars=3,
+        retrievers=[SemanticRetrieverSpec(model="nomic-ai/nomic-embed-text-v1.5")],
+    )
+    suggester.suggest_with_scores("Car Wash")
+    assert calls == ["search_query: car wash"]
 
 
 def test_suggestion_model_dump_is_api_friendly() -> None:
