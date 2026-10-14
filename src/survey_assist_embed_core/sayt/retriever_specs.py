@@ -244,12 +244,29 @@ class SemanticRetrieverSpec:
     model: str = "all-MiniLM-L6-v2"
     vectoriser_class: str | None = None
     name: str = field(init=False, default="semantic")
+    corpus_prefix: str = ""
+    query_prefix: str = ""
 
     def __post_init__(self) -> None:
         """Validate semantic retriever configuration after initialisation."""
         _validate_retriever_weight(self.weight)
         if not isinstance(self.model, str) or not self.model.strip():
             raise ValueError("semantic model must be a non-empty string")
+        if not isinstance(self.corpus_prefix, str):
+            raise ValueError("semantic corpus_prefix must be a string")
+        if not isinstance(self.query_prefix, str):
+            raise ValueError("semantic query_prefix must be a string")
+
+    def _prefixed_corpus(self, corpus: CleanCorpus) -> CleanCorpus:
+        if not self.corpus_prefix:
+            return corpus
+        print(f"Applying corpus prefix: {self.corpus_prefix}")
+        return CleanCorpus(
+            rows=[
+                (f"{self.corpus_prefix}{text}", display)
+                for text, display in corpus.rows
+            ]
+        )
 
     def build(
         self,
@@ -272,17 +289,15 @@ class SemanticRetrieverSpec:
         Returns:
             A configured ``SemanticRetriever``.
         """
-        if self.model == "nomic-ai/nomic-embed-text-v1.5":
-            corpus_nomic = [
-                (f"search_document: {text}", display) for text, display in corpus.rows
-            ]
-            corpus = CleanCorpus(rows=corpus_nomic)
+        corpus = self._prefixed_corpus(corpus)
+        print(corpus)
         if filespace_path is None:
             return SemanticRetriever(
                 corpus,
                 model=self.model,
                 vectoriser_class=self.vectoriser_class,
                 min_chars=min_chars,
+                query_prefix=self.query_prefix,
             )
 
         index = build_semantic_index(
@@ -296,6 +311,7 @@ class SemanticRetrieverSpec:
             corpus,
             min_chars=min_chars,
             index=index,
+            query_prefix=self.query_prefix,
         )
 
     def load_from_artifact(
@@ -306,6 +322,7 @@ class SemanticRetrieverSpec:
         filespace_path: str | Path | None,
     ) -> Retriever:
         """Restore a semantic retriever from its persisted dense filespace."""
+        corpus = self._prefixed_corpus(corpus)
         index = load_semantic_index(
             corpus,
             model=self.model,
@@ -316,6 +333,7 @@ class SemanticRetrieverSpec:
             corpus,
             min_chars=min_chars,
             index=index,
+            query_prefix=self.query_prefix,
         )
 
 

@@ -132,6 +132,7 @@ class _DenseRetriever:
     _corpus: CleanCorpus
     _min_chars: int
     _index: DenseVectorIndex
+    _query_prefix: str = ""
 
     @classmethod
     def from_index(
@@ -140,12 +141,14 @@ class _DenseRetriever:
         *,
         min_chars: int,
         index: DenseVectorIndex,
+        query_prefix: str = "",
     ) -> "_DenseRetriever":
         """Restore a dense retriever from an already-built dense index."""
         retriever = cls.__new__(cls)
         retriever._corpus = corpus
         retriever._min_chars = min_chars
         retriever._index = index
+        retriever._query_prefix = query_prefix
         return retriever
 
     def suggest_with_scores(
@@ -154,6 +157,7 @@ class _DenseRetriever:
         """Return dense-vector suggestions after applying retriever-level gating."""
         if len(q_norm) < self._min_chars:
             return []
+        q_norm = f"{self._query_prefix}{q_norm}"
         return self._index.query(q_norm, num_suggestions)
 
 
@@ -195,6 +199,7 @@ class SemanticRetriever(_DenseRetriever):
         model: str,
         vectoriser_class: str | None = None,
         min_chars: int,
+        query_prefix: str = "",
     ) -> None:
         """Initialise a semantic retriever.
 
@@ -204,9 +209,11 @@ class SemanticRetriever(_DenseRetriever):
                 prefix.
             vectoriser_class: Optional semantic vectoriser class or alias.
             min_chars: Minimum query length required before retrieval runs.
+            query_prefix: Optional prefix to add to all queries before retrieval.
         """
         self._corpus = corpus
         self._min_chars = min_chars
+        self._query_prefix = query_prefix
         self._index = build_semantic_index(
             corpus=corpus,
             model=model,

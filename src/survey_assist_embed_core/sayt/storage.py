@@ -343,6 +343,8 @@ def _deserialise_stored_retriever(payload: dict[str, object]) -> StoredRetriever
             vectoriser_class=(
                 None if vectoriser_class is None else str(vectoriser_class)
             ),
+            corpus_prefix=str(config.get("corpus_prefix", "")),
+            query_prefix=str(config.get("query_prefix", "")),
         )
     else:
         raise ValueError(f"Unsupported stored retriever type: {retriever_type}")
