@@ -81,7 +81,10 @@ class PrefixRetriever:
         return _PrefixIndex(search_trie=search_trie, token_trie=token_trie)
 
     def suggest_with_scores(
-        self, q_norm: str, num_suggestions: int
+        self,
+        q_norm: str,
+        num_suggestions: int,
+        show_q_norm: bool = False,
     ) -> list[Suggestion]:
         """Return ranked prefix-based suggestions for a normalised query.
 
@@ -89,10 +92,13 @@ class PrefixRetriever:
             q_norm: Normalised query text.
             num_suggestions: Maximum number of scored results to return before
                 tie expansion.
+            show_q_norm: Whether to print the normalised query for debugging purposes.
 
         Returns:
             Ranked ``Suggestion`` objects scored by prefix heuristics.
         """
+        if show_q_norm:
+            print("q_norm:", q_norm)
         if len(q_norm) < self._min_chars:
             return []
 
@@ -152,12 +158,14 @@ class _DenseRetriever:
         return retriever
 
     def suggest_with_scores(
-        self, q_norm: str, num_suggestions: int
+        self, q_norm: str, num_suggestions: int, show_q_norm: bool = False
     ) -> list[Suggestion]:
         """Return dense-vector suggestions after applying retriever-level gating."""
         if len(q_norm) < self._min_chars:
             return []
         q_norm = f"{self._query_prefix}{q_norm}"
+        if show_q_norm:
+            print("q_norm:", q_norm)
         return self._index.query(q_norm, num_suggestions)
 
 
