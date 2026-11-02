@@ -28,7 +28,10 @@ from survey_assist_embed_core.sayt.core import (
     _normalise,
     take_with_ties,
 )
-from survey_assist_embed_core.sayt.retriever_specs import Retriever, RetrieverSpec
+from survey_assist_embed_core.sayt.retriever_specs import (
+    Retriever,
+    RetrieverSpec,
+)
 from survey_assist_embed_core.sayt.storage import (
     SAYT_ARTIFACT_TYPE,
     SAYT_ARTIFACT_VERSION,
