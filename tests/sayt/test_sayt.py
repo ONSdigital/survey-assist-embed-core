@@ -485,8 +485,8 @@ def test_default_min_chars_allows_queries_from_three_characters(small_corpus):
     )
 
     assert suggester.get_config().settings.min_chars == 3
-    assert suggester.suggest("ca") == []
-    assert suggester.suggest_with_scores("ca") == []
+    assert not suggester.suggest("ca")
+    assert not suggester.suggest_with_scores("ca")
     assert "Car Wash" in suggester.suggest("car")
     assert "Car Wash" in {
         suggestion.display_text for suggestion in suggester.suggest_with_scores("car")
