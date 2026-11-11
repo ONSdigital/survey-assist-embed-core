@@ -29,7 +29,70 @@ def test_weight_specs_have_expected_retriever_names_and_defaults():
         "ngram",
         "semantic",
     ]
-    assert [spec.weights for spec in specs.specs] == [1.0, 1.0, 1.0]
+    assert [spec.weights for spec in specs.specs] == [
+        {3: 5.0, 6: 4.0},
+        {3: 4.0, 6: 3.0},
+        {3: 1.0, 6: 3.0},
+    ]
+
+
+@pytest.mark.parametrize(
+    "query_length, expected_weights",
+    [
+        (1, {"prefix": 0.0, "ngram": 0.0, "semantic": 0.0}),
+        (2, {"prefix": 0.0, "ngram": 0.0, "semantic": 0.0}),
+        (3, {"prefix": 5.0, "ngram": 4.0, "semantic": 1.0}),
+        (5, {"prefix": 5.0, "ngram": 4.0, "semantic": 1.0}),
+        (6, {"prefix": 4.0, "ngram": 3.0, "semantic": 3.0}),
+        (7, {"prefix": 4.0, "ngram": 3.0, "semantic": 3.0}),
+    ],
+)
+def test_default_weights_follow_query_length_boundaries(query_length, expected_weights):
+    """Apply default weights at and between query-length thresholds."""
+    specs = default_weight_specs()
+
+    assert {
+        name: specs.get_weight(name, query_length) for name in expected_weights
+    } == pytest.approx(expected_weights)
+
+
+@pytest.mark.parametrize(
+    "query_length, expected_weights",
+    [
+        (3, {"prefix": 0.5, "ngram": 0.4, "semantic": 0.1}),
+        (5, {"prefix": 0.5, "ngram": 0.4, "semantic": 0.1}),
+        (6, {"prefix": 0.4, "ngram": 0.3, "semantic": 0.3}),
+        (7, {"prefix": 0.4, "ngram": 0.3, "semantic": 0.3}),
+    ],
+)
+def test_default_weights_are_normalised_for_requested_query_length(
+    query_length, expected_weights
+):
+    """Normalise defaults using the weights applicable to the requested length."""
+    assert default_weight_specs().get_normalised_weights(query_length) == {
+        name: {query_length: pytest.approx(weight)}
+        for name, weight in expected_weights.items()
+    }
+
+
+@pytest.mark.parametrize("query_length", [1, 2])
+def test_default_weight_normalisation_rejects_queries_below_first_nonzero_threshold(
+    query_length,
+):
+    """Reject explicit query lengths for which all default weights are zero."""
+    with pytest.raises(
+        ValueError, match=f"Total weight cannot be zero for query length {query_length}"
+    ):
+        default_weight_specs().get_normalised_weights(query_length)
+
+
+def test_default_weights_are_normalised_at_each_configured_length():
+    """Expose the default normalised weights for both configured thresholds."""
+    assert default_weight_specs().get_normalised_weights() == {
+        "prefix": {3: pytest.approx(0.5), 6: pytest.approx(0.4)},
+        "ngram": {3: pytest.approx(0.4), 6: pytest.approx(0.3)},
+        "semantic": {3: pytest.approx(0.1), 6: pytest.approx(0.3)},
+    }
 
 
 @pytest.mark.parametrize(
