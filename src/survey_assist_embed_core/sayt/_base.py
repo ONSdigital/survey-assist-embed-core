@@ -4,6 +4,7 @@ import os
 from collections.abc import Iterable, Sequence
 
 from survey_assist_embed_core.sayt.core import (
+    DEFAULT_MIN_CHARS,
     CleanCorpus,
     validate_max_suggestions,
     validate_min_chars,
@@ -31,7 +32,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         *,
         retrievers: Sequence[RetrieverSpec] | None = None,
         weights: WeightSpecs | None = None,
-        min_chars: int = 4,
+        min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
     ) -> None:
         """Validate and store the shared corpus-bound SAYT configuration."""

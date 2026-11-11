@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 _WS_RE = re.compile(r"\s+")
 _NON_ALNUM_SPACE_RE = re.compile(r"[^a-z ]+")
+DEFAULT_MIN_CHARS = 3
 
 
 def _normalise(text: object) -> str:
