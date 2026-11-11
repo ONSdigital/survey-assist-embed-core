@@ -19,6 +19,7 @@ from survey_assist_embed_core.sayt.weight_specs import (
     PrefixWeightSpec,
     SemanticWeightSpec,
     WeightSpecs,
+    default_weight_specs,
 )
 
 
@@ -180,6 +181,22 @@ def test_serialise_stored_retriever_uses_object_dict_for_non_dataclass_specs():
             "limit": 3,
         },
     }
+
+
+def test_default_weight_specs_round_trip_through_json_storage():
+    """Preserve default weight thresholds and types through JSON serialization."""
+    original = default_weight_specs()
+
+    payload = json.loads(json.dumps(storage._serialise_weight_specs(original)))
+    restored = storage._deserialise_weight_specs(payload)
+
+    assert restored.specs == original.specs
+    assert [type(spec) for spec in restored.specs] == [
+        PrefixWeightSpec,
+        NgramWeightSpec,
+        SemanticWeightSpec,
+    ]
+    assert restored.get_normalised_weights() == original.get_normalised_weights()
 
 
 def test_weight_specs_round_trip_through_storage():

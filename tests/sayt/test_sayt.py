@@ -213,28 +213,37 @@ def test_from_csv_rejects_missing_display_column(tmp_path, small_corpus):
         )
 
 
-def test_from_artifact_restores_prefix_suggester(tmp_path, small_corpus):
+@pytest.mark.parametrize("prefix_weights", [2.0, {3: 5.0, 6: 4.0}])
+def test_from_artifact_restores_prefix_suggester(
+    tmp_path, small_corpus, prefix_weights
+):
     """Round-trip a prefix-only artifact into a working suggester."""
     artifact_dir = SAYTBuilder(
         small_corpus,
         retrievers=[PrefixRetrieverSpec()],
-        min_chars=3,
         max_suggestions=5,
-        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=2.0)]),
+        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=prefix_weights)]),
     ).build_artifact(tmp_path / "artifact")
 
     restored = SAYTSuggester.from_artifact(artifact_dir)
     expected = SAYTSuggester(
         small_corpus,
         retrievers=[PrefixRetrieverSpec()],
-        min_chars=3,
         max_suggestions=5,
-        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=2.0)]),
+        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=prefix_weights)]),
     )
     restored_config = restored.get_config()
     expected_config = expected.get_config()
 
+    assert restored_config.settings.min_chars == 3
+    assert restored.suggest("ca") == []
+    assert restored.suggest("car")
     assert restored.suggest("car") == expected.suggest("car")
+    assert restored.suggest_with_scores("car") == expected.suggest_with_scores("car")
+    assert restored.suggest_with_scores("car wa") == expected.suggest_with_scores(
+        "car wa"
+    )
+    assert restored_config.weight_specs == expected_config.weight_specs
     assert restored_config.settings == expected_config.settings
     assert restored_config.corpus == expected_config.corpus
     assert [
