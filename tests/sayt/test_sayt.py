@@ -236,7 +236,7 @@ def test_from_artifact_restores_prefix_suggester(
     expected_config = expected.get_config()
 
     assert restored_config.settings.min_chars == 3
-    assert restored.suggest("ca") == []
+    assert not restored.suggest("ca")
     assert restored.suggest("car")
     assert restored.suggest("car") == expected.suggest("car")
     assert restored.suggest_with_scores("car") == expected.suggest_with_scores("car")
