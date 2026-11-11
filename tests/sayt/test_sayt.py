@@ -476,6 +476,23 @@ def test_get_config_returns_empty_config_for_slots_only_custom_spec(small_corpus
     assert config.retrievers[0].config == {}
 
 
+def test_default_min_chars_allows_queries_from_three_characters(small_corpus):
+    """Default to three characters for both public suggestion methods."""
+    suggester = SAYTSuggester(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    )
+
+    assert suggester.get_config().settings.min_chars == 3
+    assert suggester.suggest("ca") == []
+    assert suggester.suggest_with_scores("ca") == []
+    assert "Car Wash" in suggester.suggest("car")
+    assert "Car Wash" in {
+        suggestion.display_text for suggestion in suggester.suggest_with_scores("car")
+    }
+
+
 def test_suggest_returns_empty_for_short_or_non_string_query(small_corpus):
     """Return no suggestions for short or non-string queries."""
     suggester = SAYTSuggester(

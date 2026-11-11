@@ -106,7 +106,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         *,
         retrievers: Sequence[RetrieverSpec] | None = None,
         weights: WeightSpecs | None = None,
-        min_chars: int = 4,
+        min_chars: int = 3,
         max_suggestions: int = 10,
     ) -> None:
         """Initialise a suggester for a cleaned response corpus.
