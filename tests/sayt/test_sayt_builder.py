@@ -105,12 +105,14 @@ def test_builder_from_csv_loads_columns_and_persists_artifact(tmp_path, small_co
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
         max_suggestions=5,
+        include_tied_suggestions=True,
     ).build_artifact(tmp_path / "artifact")
 
     manifest = json.loads((artifact_dir / "manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["min_chars"] == 3
     assert manifest["max_suggestions"] == 5
+    assert manifest["include_tied_suggestions"] is True
     assert manifest["corpus_size"] == len(small_corpus)
 
 
@@ -123,6 +125,7 @@ def test_builder_writes_manifest_and_corpus(tmp_path, small_corpus):
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
         max_suggestions=5,
+        include_tied_suggestions=True,
         weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     ).build_artifact(artifact_dir)
 
@@ -136,6 +139,7 @@ def test_builder_writes_manifest_and_corpus(tmp_path, small_corpus):
         "artifact_version": 2,
         "min_chars": 3,
         "max_suggestions": 5,
+        "include_tied_suggestions": True,
         "corpus_file": "corpus.csv",
         "corpus_size": len(small_corpus),
         "retrievers": [
