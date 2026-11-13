@@ -65,6 +65,10 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
     present these include:
     - ``min_chars``: minimum query length before retrieval runs
     - ``max_suggestions``: default maximum number of ranked suggestions to return
+    - ``include_tied_suggestions``: whether to include all suggestions with the
+      same score as the last suggestion within the limit. If True, results may
+      exceed the requested count (or ``max_suggestions`` when no count is
+      supplied). If False, that count is a strict upper limit.
 
     Examples:
         Basic usage with an in-memory corpus:
@@ -79,6 +83,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 ],
                 min_chars=3,
                 max_suggestions=5,
+                include_tied_suggestions=True,
             )
 
             results = suggester.suggest("car")
@@ -100,7 +105,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             ```
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
@@ -108,6 +113,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         weights: WeightSpecs | None = None,
         min_chars: int = 4,
         max_suggestions: int = 10,
+        include_tied_suggestions: bool = False,
     ) -> None:
         """Initialise a suggester for a cleaned response corpus.
 
@@ -121,6 +127,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             min_chars: Minimum query length before retrieval runs.
             max_suggestions: Default maximum number of ranked suggestions to
                 return.
+            include_tied_suggestions: Whether to include items tied at the cutoff score,
+                allowing results to exceed ``max_suggestions``. Defaults to False.
         """
         super().__init__(
             corpus,
@@ -128,6 +136,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             weights=weights,
             min_chars=min_chars,
             max_suggestions=max_suggestions,
+            include_tied_suggestions=include_tied_suggestions,
         )
         self._weight_specs.warn_for_retriever_names(
             [spec.name for spec in self._retriever_specs]
@@ -146,6 +155,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             retriever_count=len(self._retrievers),
             min_chars=self._min_chars,
             max_suggestions=self._max_suggestions,
+            include_tied_suggestions=self._include_tied_suggestions,
         )
 
     @classmethod
@@ -155,6 +165,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         corpus: CleanCorpus,
         min_chars: int,
         max_suggestions: int,
+        include_tied_suggestions: bool,
         retriever_specs: Sequence[RetrieverSpec],
         retrievers: list[_ConfiguredRetriever],
         stored_retrievers: Sequence[StoredRetrieverSpec] | None = None,
@@ -167,6 +178,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         suggester._corpus = corpus
         suggester._min_chars = min_chars
         suggester._max_suggestions = max_suggestions
+        suggester._include_tied_suggestions = include_tied_suggestions
         suggester._retriever_specs = tuple(retriever_specs)
         suggester._retrievers = retrievers
         suggester._stored_retrievers = (
@@ -219,6 +231,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             corpus=corpus,
             min_chars=manifest.min_chars,
             max_suggestions=manifest.max_suggestions,
+            include_tied_suggestions=manifest.include_tied_suggestions,
             retriever_specs=retriever_specs,
             retrievers=retrievers,
             stored_retrievers=manifest.retrievers,
@@ -346,8 +359,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 return. When omitted, the configured default is used.
             include_tied_suggestions: Whether to include suggestions tied at the
                 cutoff score, allowing results to exceed ``num_suggestions``.
-                When omitted or None, ties are included. If False,
-                ``num_suggestions`` is a strict upper limit.
+                When omitted or None, the suggester's configured setting is used.
+                If False, ``num_suggestions`` is a strict upper limit.
             weights: Optional retriever weight override. When supplied,
                 the suggester will reweight the configured retrievers for this
                 query only. The retriever order is preserved, but the weights are
@@ -385,7 +398,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             limit=num_suggestions,
             include_tied_suggestions=include_tied_suggestions
             if include_tied_suggestions is not None
-            else True,
+            else self._include_tied_suggestions,
             display_text_value_counts=self._corpus.display_text_value_counts,
         )
 
@@ -404,8 +417,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 return. When omitted, the configured default is used.
             include_tied_suggestions: Whether to include suggestions tied at the
                 cutoff score, allowing results to exceed ``num_suggestions``.
-                When omitted or None, ties are included. If False,
-                ``num_suggestions`` is a strict upper limit.
+                When omitted or None, the suggester's configured setting is used.
+                If False, ``num_suggestions`` is a strict upper limit.
             weights: Optional retriever weight override. When supplied,
                 the suggester will reweight the configured retrievers for this
                 query only. The retriever order is preserved, but the weights are
@@ -424,7 +437,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         results = self.suggest_with_scores(
             query,
             num_suggestions=num_suggestions,
-            include_tied_suggestions=include_tied_suggestions,
+            include_tied_suggestions=include_tied_suggestions
+            if include_tied_suggestions is not None
+            else self._include_tied_suggestions,
             weights=weights,
         )
         elapsed_time = time.time() - start_time
@@ -474,6 +489,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             settings=SaytGlobalSettings(
                 min_chars=self._min_chars,
                 max_suggestions=self._max_suggestions,
+                include_tied_suggestions=self._include_tied_suggestions,
             ),
             corpus=SaytCorpusSummary(
                 size=self._corpus.size,

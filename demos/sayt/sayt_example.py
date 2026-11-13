@@ -82,3 +82,33 @@ for query in ["car", "cars", "waxi", "grom", "wash", "duplicate", "auto"]:
     print()
 
 # %%
+# Prefix-only retrieval gives several "car" matches identical cutoff scores.
+for include_tied_suggestions in [False, True]:
+    prefix_suggester = SAYTSuggester(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+        min_chars=3,
+        max_suggestions=2,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+    default_results = prefix_suggester.suggest_with_scores("car")
+    override_results = prefix_suggester.suggest_with_scores(
+        "car", include_tied_suggestions=not include_tied_suggestions
+    )
+
+    print("configured include_tied_suggestions:", include_tied_suggestions)
+    print(
+        "configured default",
+        "->",
+        [suggestion.model_dump() for suggestion in default_results],
+    )
+    print(
+        "per-query override:",
+        not include_tied_suggestions,
+        "->",
+        [suggestion.model_dump() for suggestion in override_results],
+    )
+    print()
+
+# %%

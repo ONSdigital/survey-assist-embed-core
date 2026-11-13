@@ -177,6 +177,13 @@ def validate_max_suggestions(value: object) -> int:
     return max_suggestions
 
 
+def validate_include_tied_suggestions(value: object) -> bool:
+    """Validate the global SAYT include_tied_suggestions setting."""
+    if not isinstance(value, bool):
+        raise TypeError("include_tied_suggestions must be a boolean")
+    return value
+
+
 class SaytGlobalSettings(BaseModel):
     """Describe suggester-wide runtime settings."""
 
@@ -184,6 +191,7 @@ class SaytGlobalSettings(BaseModel):
 
     min_chars: int
     max_suggestions: int
+    include_tied_suggestions: bool
 
 
 class SaytCorpusSummary(BaseModel):

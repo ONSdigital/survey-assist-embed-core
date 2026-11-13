@@ -13,6 +13,7 @@ from survey_assist_embed_core.adapters.storage import resolve_local_path
 from survey_assist_embed_core.sayt.core import (
     CleanCorpus,
     PersistedCorpusRow,
+    validate_include_tied_suggestions,
     validate_max_suggestions,
     validate_min_chars,
 )
@@ -53,6 +54,7 @@ class SaytArtifactManifest:
 
     min_chars: int
     max_suggestions: int
+    include_tied_suggestions: bool
     corpus_file: str
     corpus_size: int
     retrievers: tuple[StoredRetrieverSpec, ...]
@@ -146,11 +148,12 @@ def read_artifact_corpus(
         ]
 
 
-def build_artifact_manifest(
+def build_artifact_manifest(  # noqa: PLR0913
     *,
     corpus: CleanCorpus,
     min_chars: int,
     max_suggestions: int,
+    include_tied_suggestions: bool,
     retriever_specs: tuple[RetrieverSpec, ...],
     weight_specs: WeightSpecs,
 ) -> SaytArtifactManifest:
@@ -158,6 +161,7 @@ def build_artifact_manifest(
     return SaytArtifactManifest(
         min_chars=min_chars,
         max_suggestions=max_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
         corpus_file=CORPUS_FILE_NAME,
         corpus_size=corpus.size,
         retrievers=tuple(
@@ -198,6 +202,9 @@ def read_artifact_manifest(*, artifact_dir: str | Path) -> SaytArtifactManifest:
         return SaytArtifactManifest(
             min_chars=validate_min_chars(payload["min_chars"]),
             max_suggestions=validate_max_suggestions(payload["max_suggestions"]),
+            include_tied_suggestions=validate_include_tied_suggestions(
+                payload.get("include_tied_suggestions", True)
+            ),
             corpus_file=str(payload["corpus_file"]),
             corpus_size=int(payload["corpus_size"]),
             retrievers=tuple(
@@ -290,6 +297,7 @@ def _serialise_manifest(manifest: SaytArtifactManifest) -> dict[str, object]:
         "artifact_version": SAYT_ARTIFACT_VERSION,
         "min_chars": manifest.min_chars,
         "max_suggestions": manifest.max_suggestions,
+        "include_tied_suggestions": manifest.include_tied_suggestions,
         "corpus_file": manifest.corpus_file,
         "corpus_size": manifest.corpus_size,
         "retrievers": [
