@@ -65,6 +65,7 @@ artifact_path = SAYTBuilder(
     retrievers=retrievers,
     min_chars=3,
     max_suggestions=5,
+    include_tied_suggestions=False,
     weights=weights,
 ).build_artifact(artifact_dir, overwrite=True)
 
@@ -86,6 +87,7 @@ live_suggester = SAYTSuggester(
     retrievers=retrievers,
     min_chars=3,
     max_suggestions=5,
+    include_tied_suggestions=False,
     weights=weights,
 )
 loaded_suggester = SAYTSuggester.from_artifact(artifact_path)
@@ -111,9 +113,68 @@ for query in ["car", "cars", "waxi", "grom", "wash", "duplicate", "auto"]:
 
 
 # %%
+query = "car"
+print("strict limit (configured in the artifact):", loaded_suggester.suggest(query, 2))
+print(
+    "include cutoff ties (may exceed 2 suggestions):",
+    loaded_suggester.suggest(query, 2, include_tied_suggestions=True),
+)
+
+
+# %%
+# Build a separate prefix-only artifact so "car" produces exact cutoff ties.
+prefix_artifact_path = SAYTBuilder(
+    small_corpus,
+    retrievers=[PrefixRetrieverSpec()],
+    weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    min_chars=3,
+    max_suggestions=2,
+    include_tied_suggestions=False,
+).build_artifact(Path(temp_dir.name) / "prefix_cutoff_ties")
+prefix_suggester = SAYTSuggester.from_artifact(prefix_artifact_path)
+
+prefix_strict_results = prefix_suggester.suggest_with_scores("car")
+prefix_tied_results = prefix_suggester.suggest_with_scores(
+    "car", include_tied_suggestions=True
+)
+print(
+    "prefix artifact, strict limit:",
+    [suggestion.model_dump() for suggestion in prefix_strict_results],
+)
+print(
+    "prefix artifact, including cutoff ties:",
+    [suggestion.model_dump() for suggestion in prefix_tied_results],
+)
+
+# %%
+# Persist ties as the default, then override that setting for one query.
+prefix_ties_artifact_path = SAYTBuilder(
+    small_corpus,
+    retrievers=[PrefixRetrieverSpec()],
+    weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    min_chars=3,
+    max_suggestions=2,
+    include_tied_suggestions=True,
+).build_artifact(Path(temp_dir.name) / "prefix_cutoff_ties_enabled")
+prefix_ties_suggester = SAYTSuggester.from_artifact(prefix_ties_artifact_path)
+
+prefix_ties_default_results = prefix_ties_suggester.suggest_with_scores("car")
+prefix_ties_strict_results = prefix_ties_suggester.suggest_with_scores(
+    "car", include_tied_suggestions=False
+)
+print(
+    "ties-enabled artifact, including cutoff ties by default:",
+    [suggestion.model_dump() for suggestion in prefix_ties_default_results],
+)
+print(
+    "ties-enabled artifact, strict limit override:",
+    [suggestion.model_dump() for suggestion in prefix_ties_strict_results],
+)
+# %%
 # Run `temp_dir.cleanup()` when you are finished exploring the saved files.
 print("artifact ready for inspection:", artifact_path)
 
 
 # %%
 temp_dir.cleanup()
+# %%

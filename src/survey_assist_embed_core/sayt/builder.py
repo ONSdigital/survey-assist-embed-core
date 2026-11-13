@@ -51,6 +51,7 @@ class SAYTBuilder(BaseCorpusBound):
                 corpus=self._corpus,
                 min_chars=self._min_chars,
                 max_suggestions=self._max_suggestions,
+                include_tied_suggestions=self._include_tied_suggestions,
                 retriever_specs=self._retriever_specs,
                 weight_specs=self._weight_specs,
             )
