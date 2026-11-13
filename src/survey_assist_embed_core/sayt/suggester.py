@@ -335,6 +335,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         self,
         query: str | None,
         num_suggestions: int | None = None,
+        include_tied_suggestions: bool | None = None,
         weights: WeightSpecs | None = None,
     ) -> list[Suggestion]:
         """Return ranked suggestions and their combined scores.
@@ -343,14 +344,19 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             query: Raw user query text.
             num_suggestions: Optional maximum number of ranked suggestions to
                 return. When omitted, the configured default is used.
+            include_tied_suggestions: Whether to include suggestions tied at the
+                cutoff score, allowing results to exceed ``num_suggestions``.
+                When omitted or None, ties are included. If False,
+                ``num_suggestions`` is a strict upper limit.
             weights: Optional retriever weight override. When supplied,
                 the suggester will reweight the configured retrievers for this
                 query only. The retriever order is preserved, but the weights are
                 normalised to sum to 1.0.
 
         Returns:
-            A list of combined suggestions ordered by descending score. Returns
-            an empty list when the normalised query is shorter than
+            A display-text-deduplicated list of combined suggestions ordered by
+            descending score, including ties at the cutoff only when enabled.
+            Returns an empty list when the normalised query is shorter than
             ``min_chars``.
 
         Notes:
@@ -375,13 +381,19 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
 
         combined_result = self._combine_suggestions(results_by_kind)
         return take_with_ties(
-            combined_result, num_suggestions, self._corpus.display_text_value_counts
+            combined_result,
+            limit=num_suggestions,
+            include_tied_suggestions=include_tied_suggestions
+            if include_tied_suggestions is not None
+            else True,
+            display_text_value_counts=self._corpus.display_text_value_counts,
         )
 
     def suggest(
         self,
         query: str | None,
         num_suggestions: int | None = None,
+        include_tied_suggestions: bool | None = None,
         weights: WeightSpecs | None = None,
     ) -> list[str]:
         """Return display-text-deduplicated suggestions.
@@ -390,6 +402,10 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             query: Raw user query text.
             num_suggestions: Optional maximum number of display values to
                 return. When omitted, the configured default is used.
+            include_tied_suggestions: Whether to include suggestions tied at the
+                cutoff score, allowing results to exceed ``num_suggestions``.
+                When omitted or None, ties are included. If False,
+                ``num_suggestions`` is a strict upper limit.
             weights: Optional retriever weight override. When supplied,
                 the suggester will reweight the configured retrievers for this
                 query only. The retriever order is preserved, but the weights are
@@ -399,7 +415,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
 
         Returns:
             A list of display-text suggestions ordered by descending combined
-            score, while preserving ties at the cutoff.
+            score, including ties at the cutoff only when enabled.
         """
         start_time = time.time()
 
@@ -408,6 +424,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         results = self.suggest_with_scores(
             query,
             num_suggestions=num_suggestions,
+            include_tied_suggestions=include_tied_suggestions,
             weights=weights,
         )
         elapsed_time = time.time() - start_time

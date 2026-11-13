@@ -540,6 +540,58 @@ def test_suggest_keeps_ties_at_cutoff(prefix_suggester):
     ]
 
 
+@pytest.mark.parametrize("with_scores", [False, True])
+@pytest.mark.parametrize("num_suggestions", [None, 1])
+@pytest.mark.parametrize("include_tied_suggestions", [None, True, False])
+def test_suggest_applies_optional_tie_policy(
+    small_corpus, with_scores, num_suggestions, include_tied_suggestions
+):
+    """Apply the tie policy to explicit counts and the configured default."""
+    suggester = SAYTSuggester(
+        small_corpus,
+        min_chars=3,
+        max_suggestions=2,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    )
+    suggest = suggester.suggest_with_scores if with_scores else suggester.suggest
+
+    results = suggest(
+        "car",
+        num_suggestions=num_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+    display_texts = (
+        [result.display_text for result in results] if with_scores else results
+    )
+    expected = [
+        "Car Waxing",
+        "Car Wash",
+        "CAR WASH (duplicate)",
+        "Carpentry services",
+    ]
+    if include_tied_suggestions is False:
+        expected = expected[: 2 if num_suggestions is None else num_suggestions]
+
+    assert display_texts == expected
+
+
+@pytest.mark.parametrize("with_scores", [False, True])
+def test_suggest_strict_limit_is_query_local(prefix_suggester, with_scores):
+    """Disabling ties must not change later requests using the default policy."""
+    suggest = (
+        prefix_suggester.suggest_with_scores
+        if with_scores
+        else prefix_suggester.suggest
+    )
+
+    strict_results = suggest("car", num_suggestions=1, include_tied_suggestions=False)
+    default_results = suggest("car", num_suggestions=1)
+
+    assert len(strict_results) == 1
+    assert len(default_results) == 4
+
+
 def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
     """Delegate only to the configured retriever specs."""
     semantic_calls = []
