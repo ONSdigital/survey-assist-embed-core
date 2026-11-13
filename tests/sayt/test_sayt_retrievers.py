@@ -300,6 +300,61 @@ def test_dense_retriever_keeps_ties_at_cutoff(small_corpus):
     assert {s.display_text for s in results} == {corpus.rows[0][1], corpus.rows[1][1]}
 
 
+@pytest.mark.parametrize("retriever_class", [NgramRetriever, SemanticRetriever])
+def test_dense_retriever_excludes_nonpositive_scores(retriever_class):
+    """Keep positive similarities, including small ones, without zero-score padding."""
+    rows = [
+        {"doc_label": "Strong match", "score": 0.9},
+        {"doc_label": "Weak match", "score": 1e-12},
+        {"doc_label": "Zero match", "score": 0.0},
+        {"doc_label": "Negative zero match", "score": -0.0},
+        {"doc_label": "Negative match", "score": -0.2},
+    ]
+    corpus = CleanCorpus.model_validate(
+        [(row["doc_label"], row["doc_label"]) for row in rows]
+    )
+    index = DenseVectorIndex(
+        _vector_store=_StubVectorStore(rows),
+        _num_vectors=len(rows),
+        _corpus=corpus,
+    )
+    retriever = retriever_class.from_index(corpus, min_chars=3, index=index)
+
+    results = retriever.suggest_with_scores("car", num_suggestions=5)
+
+    assert [(s.display_text, s.score) for s in results] == [
+        ("Strong match", 0.9),
+        ("Weak match", 1e-12),
+    ]
+
+
+@pytest.mark.parametrize("retriever_class", [NgramRetriever, SemanticRetriever])
+def test_dense_retriever_returns_empty_when_all_scores_are_nonpositive(
+    retriever_class,
+):
+    """Exhaust candidates and return no suggestions when none score positively."""
+    corpus = CleanCorpus.model_validate(
+        [("zero match", "Zero match"), ("negative match", "Negative match")]
+    )
+    store = _StubVectorStore(
+        [
+            {"doc_label": "Zero match", "score": 0.0},
+            {"doc_label": "Negative match", "score": -0.2},
+        ]
+    )
+    index = DenseVectorIndex(
+        _vector_store=store,
+        _num_vectors=2,
+        _corpus=corpus,
+    )
+    retriever = retriever_class.from_index(corpus, min_chars=3, index=index)
+
+    results = retriever.suggest_with_scores("car", num_suggestions=1)
+
+    assert not results
+    assert [n_results for _, n_results in store.calls] == [1, 2]
+
+
 def test_dense_vector_index_builds_persistent_filespace(
     monkeypatch, tmp_path, small_corpus
 ):

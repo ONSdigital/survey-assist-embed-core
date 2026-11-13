@@ -205,6 +205,7 @@ class DenseVectorIndex:
             suggestions = [
                 Suggestion(display_text=label, score=score)
                 for label, score in zip(labels, scores, strict=True)
+                if score > 0
             ]
             out = take_with_ties(suggestions, limit=num_suggestions)
 
