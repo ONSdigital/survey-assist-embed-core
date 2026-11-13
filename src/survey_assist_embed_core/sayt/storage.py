@@ -148,7 +148,7 @@ def read_artifact_corpus(
         ]
 
 
-def build_artifact_manifest(  # noqa: PLR0913
+def build_artifact_manifest(  # noqa: PLR0913 pylint: disable = R0913
     *,
     corpus: CleanCorpus,
     min_chars: int,

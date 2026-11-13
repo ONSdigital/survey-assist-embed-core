@@ -27,7 +27,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
     _retriever_specs: tuple[RetrieverSpec, ...]
     _weights: WeightSpecs
 
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913 pylint: disable = R0913
         self,
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,

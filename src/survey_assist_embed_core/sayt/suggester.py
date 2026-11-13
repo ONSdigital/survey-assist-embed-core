@@ -105,7 +105,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             ```
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913 pylint: disable = R0913
         self,
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
