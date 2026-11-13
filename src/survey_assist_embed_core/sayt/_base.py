@@ -73,8 +73,8 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         return cls(
             corpus_rows,
             retrievers=retrievers,
-            weights=weights,
             min_chars=min_chars,
+            weights=weights,
             max_suggestions=max_suggestions,
             include_tied_suggestions=include_tied_suggestions,
         )
