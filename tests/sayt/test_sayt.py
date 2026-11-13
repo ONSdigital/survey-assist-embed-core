@@ -626,7 +626,7 @@ def test_suggest_tie_override_is_query_local(
 ):
     """Overriding ties must not change later requests using the configured policy."""
     suggester = SAYTSuggester(
-        small_corpus,
+        corpus=small_corpus,
         min_chars=3,
         retrievers=[PrefixRetrieverSpec()],
         weights=WeightSpecs(specs=[PrefixWeightSpec()]),
