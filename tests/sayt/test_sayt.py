@@ -645,6 +645,69 @@ def test_suggest_tie_override_is_query_local(
     assert len(default_results) == (4 if configured_include_ties else 1)
 
 
+@pytest.mark.parametrize(
+    ("num_suggestions", "include_tied_suggestions", "expected_display_texts"),
+    [
+        (1, False, ["Top"]),
+        (1, True, ["Top"]),
+        (2, False, ["Top", "alpha"]),
+        (2, True, ["Top", "alpha", "Beta"]),
+    ],
+)
+def test_suggest_with_scores_limits_mixed_scores_without_changing_scores(
+    prefix_suggester,
+    monkeypatch,
+    num_suggestions,
+    include_tied_suggestions,
+    expected_display_texts,
+):
+    """Include only cutoff ties while preserving ranked suggestions and scores."""
+    scores = {"Beta": 0.8, "Lower": 0.5, "Top": 1.0, "alpha": 0.8}
+    suggestions = [
+        Suggestion(display_text=text, score=score) for text, score in scores.items()
+    ]
+    monkeypatch.setattr(
+        prefix_suggester,
+        "_collect_retriever_results",
+        lambda *args, **kwargs: [(1.0, suggestions)],
+    )
+
+    results = prefix_suggester.suggest_with_scores(
+        "car",
+        num_suggestions=num_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+
+    assert results == [
+        Suggestion(display_text=text, score=scores[text])
+        for text in expected_display_texts
+    ]
+
+
+@pytest.mark.parametrize("include_tied_suggestions", [False, True])
+@pytest.mark.parametrize("num_suggestions", [-1, 0, 10])
+def test_suggest_with_scores_tie_policy_handles_limit_boundaries(
+    prefix_suggester, num_suggestions, include_tied_suggestions
+):
+    """Return no results for nonpositive limits and all matches for large limits."""
+    results = prefix_suggester.suggest_with_scores(
+        "car",
+        num_suggestions=num_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+
+    assert [result.display_text for result in results] == (
+        [
+            "Car Waxing",
+            "Car Wash",
+            "CAR WASH (duplicate)",
+            "Carpentry services",
+        ]
+        if num_suggestions > 0
+        else []
+    )
+
+
 def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):
     """Delegate only to the configured retriever specs."""
     semantic_calls = []
