@@ -281,10 +281,9 @@ class Suggestion(BaseModel):
 def take_with_ties(
     items: list[Suggestion],
     limit: int,
-    include_tied_suggestions: bool = True,
     display_text_value_counts: dict[str, int] | None = None,
 ) -> list[Suggestion]:
-    """Return ranked, deduplicated items with optional ties at the cutoff.
+    """Return the first ``limit`` items and any later items tied on score.
 
     The items are ranked based on the following factors (in order):
         1. Descending score.
@@ -295,18 +294,13 @@ def take_with_ties(
     Args:
         items: Scored ``Suggestion`` objects to rank.
         limit: Maximum number of leading items before tie extension is applied.
-        include_tied_suggestions: Whether to include items tied at the cutoff score,
-            allowing results to exceed ``limit``. Defaults to True.
-            If False, ``limit`` is a strict upper limit.
         display_text_value_counts: Optional mapping of display text to occurrence counts
             in the corpus. If provided, items whose display text occurs more than
             once will be considered for higher priority.
 
     Returns:
-        The highest-scoring unique display-text items up to ``limit``, plus
-        any later items tied with the cutoff score when
-        ``include_tied_suggestions`` is True. Returns an empty list when
-        ``limit`` is less than 1 or ``items`` is empty.
+        The highest-scoring items up to ``limit``, plus any later items that are
+        tied with the cutoff score.
     """
     if limit < 1 or not items:
         return []
@@ -336,4 +330,4 @@ def take_with_ties(
     end = limit
     while end < len(deduped_items) and float(deduped_items[end].score) == cutoff_score:
         end += 1
-    return deduped_items[:end] if include_tied_suggestions else deduped_items[:limit]
+    return deduped_items[:end]

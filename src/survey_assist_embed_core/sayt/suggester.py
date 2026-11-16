@@ -375,8 +375,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         Notes:
             - Each retriever is asked for ``num_suggestions * 5`` candidates to
               improve cross-retriever score pairing before final truncation.
-            - Final ranking and cutoff tie handling are delegated to
+            - Final ranking and cutoff tie expansion are delegated to
               ``take_with_ties`` using corpus display-text duplication counts.
+              Results are then trimmed when tied suggestions are disabled.
             - Output is display-text deduplicated by ``take_with_ties``.
         """
         if num_suggestions is None:
@@ -393,13 +394,17 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         )
 
         combined_result = self._combine_suggestions(results_by_kind)
-        return take_with_ties(
+        ranked_results = take_with_ties(
             combined_result,
             limit=num_suggestions,
-            include_tied_suggestions=include_tied_suggestions
-            if include_tied_suggestions is not None
-            else self._include_tied_suggestions,
             display_text_value_counts=self._corpus.display_text_value_counts,
+        )
+        if include_tied_suggestions is None:
+            include_tied_suggestions = self._include_tied_suggestions
+        return (
+            ranked_results
+            if include_tied_suggestions
+            else ranked_results[:num_suggestions]
         )
 
     def suggest(
