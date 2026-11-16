@@ -1,7 +1,7 @@
 """Tests for the SAYTSuggester public API."""
 
 # ruff: noqa: PLR2004
-# pylint: disable=protected-access,redefined-outer-name,too-few-public-methods,C0116,W0613
+# pylint: disable=protected-access,redefined-outer-name,too-few-public-methods,C0116,W0613,C0302
 
 import json
 from collections import Counter
