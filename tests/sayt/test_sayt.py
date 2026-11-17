@@ -215,7 +215,10 @@ def test_from_csv_rejects_missing_display_column(tmp_path, small_corpus):
         )
 
 
-def test_from_artifact_restores_prefix_suggester(tmp_path, small_corpus):
+@pytest.mark.parametrize("prefix_weights", [2.0, {3: 5.0, 6: 4.0}])
+def test_from_artifact_restores_prefix_suggester(
+    tmp_path, small_corpus, prefix_weights
+):
     """Round-trip a prefix-only artifact into a working suggester."""
     artifact_dir = SAYTBuilder(
         small_corpus,
@@ -223,7 +226,7 @@ def test_from_artifact_restores_prefix_suggester(tmp_path, small_corpus):
         min_chars=3,
         max_suggestions=2,
         include_tied_suggestions=True,
-        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=2.0)]),
+        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=prefix_weights)]),
     ).build_artifact(tmp_path / "artifact")
 
     restored = SAYTSuggester.from_artifact(artifact_dir)
@@ -233,15 +236,20 @@ def test_from_artifact_restores_prefix_suggester(tmp_path, small_corpus):
         min_chars=3,
         max_suggestions=2,
         include_tied_suggestions=True,
-        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=2.0)]),
+        weights=WeightSpecs(specs=[PrefixWeightSpec(weights=prefix_weights)]),
     )
     restored_config = restored.get_config()
     expected_config = expected.get_config()
 
+    assert restored_config.settings.min_chars == 3
+    assert not restored.suggest("ca")
+    assert restored.suggest("car")
     assert restored.suggest("car") == expected.suggest("car")
-    assert len(restored.suggest("car")) == 4
-    assert len(restored.suggest("car", include_tied_suggestions=False)) == 2
-    assert len(restored.suggest("car")) == 4
+    assert restored.suggest_with_scores("car") == expected.suggest_with_scores("car")
+    assert restored.suggest_with_scores("car wa") == expected.suggest_with_scores(
+        "car wa"
+    )
+    assert restored_config.weight_specs == expected_config.weight_specs
     assert restored_config.settings == expected_config.settings
     assert restored_config.corpus == expected_config.corpus
     assert [
@@ -255,6 +263,41 @@ def test_from_artifact_restores_prefix_suggester(tmp_path, small_corpus):
     assert restored_config.artifact_provenance.artifact_dir == str(artifact_dir)
     assert restored_config.retrievers[0].artifact_provenance is not None
     assert expected_config.artifact_provenance is None
+
+
+@pytest.mark.parametrize(
+    ("include_tied_suggestions", "default_count", "override_count"),
+    [(True, 4, 2), (False, 2, 4)],
+)
+def test_from_artifact_preserves_tie_policy(
+    tmp_path, small_corpus, include_tied_suggestions, default_count, override_count
+):
+    """Restore the tie policy and allow overrides without changing its default."""
+    artifact_dir = SAYTBuilder(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+        min_chars=3,
+        max_suggestions=2,
+        include_tied_suggestions=include_tied_suggestions,
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    ).build_artifact(tmp_path / "artifact")
+
+    restored = SAYTSuggester.from_artifact(artifact_dir)
+
+    assert (
+        restored.get_config().settings.include_tied_suggestions
+        is include_tied_suggestions
+    )
+    assert len(restored.suggest("car")) == default_count
+    assert (
+        len(
+            restored.suggest(
+                "car", include_tied_suggestions=not include_tied_suggestions
+            )
+        )
+        == override_count
+    )
+    assert len(restored.suggest("car")) == default_count
 
 
 def test_from_legacy_artifact_preserves_cutoff_ties(tmp_path, small_corpus):
@@ -504,6 +547,23 @@ def test_get_config_returns_empty_config_for_slots_only_custom_spec(small_corpus
     ).get_config()
 
     assert config.retrievers[0].config == {}
+
+
+def test_default_min_chars_allows_queries_from_three_characters(small_corpus):
+    """Default to three characters for both public suggestion methods."""
+    suggester = SAYTSuggester(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    )
+
+    assert suggester.get_config().settings.min_chars == 3
+    assert not suggester.suggest("ca")
+    assert not suggester.suggest_with_scores("ca")
+    assert "Car Wash" in suggester.suggest("car")
+    assert "Car Wash" in {
+        suggestion.display_text for suggestion in suggester.suggest_with_scores("car")
+    }
 
 
 def test_suggest_returns_empty_for_short_or_non_string_query(small_corpus):

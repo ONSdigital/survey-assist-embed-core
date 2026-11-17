@@ -15,6 +15,7 @@ from survey_assist_utils.logging import get_logger
 
 from survey_assist_embed_core.sayt._base import BaseCorpusBound
 from survey_assist_embed_core.sayt.core import (
+    DEFAULT_MIN_CHARS,
     CleanCorpus,
     SaytArtifactProvenance,
     SaytConfiguration,
@@ -111,7 +112,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         *,
         retrievers: Sequence[RetrieverSpec] | None = None,
         weights: WeightSpecs | None = None,
-        min_chars: int = 4,
+        min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
         include_tied_suggestions: bool = False,
     ) -> None:

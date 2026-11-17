@@ -4,6 +4,7 @@ import os
 from collections.abc import Iterable, Sequence
 
 from survey_assist_embed_core.sayt.core import (
+    DEFAULT_MIN_CHARS,
     CleanCorpus,
     validate_include_tied_suggestions,
     validate_max_suggestions,
@@ -33,7 +34,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         *,
         retrievers: Sequence[RetrieverSpec] | None = None,
         weights: WeightSpecs | None = None,
-        min_chars: int = 4,
+        min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
         include_tied_suggestions: bool = False,
     ) -> None:
