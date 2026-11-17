@@ -1,7 +1,7 @@
 """Tests for the SAYTSuggester public API."""
 
 # ruff: noqa: PLR2004
-# pylint: disable=protected-access,redefined-outer-name,too-few-public-methods,C0116,W0613
+# pylint: disable=protected-access,redefined-outer-name,too-few-public-methods,C0116,W0613,C0302
 
 import json
 from collections import Counter
@@ -144,7 +144,7 @@ def test_clean_corpus_warns_and_falls_back_when_display_is_missing():
 
 
 def test_from_csv_builds_and_suggests(tmp_path, small_corpus):
-    """Build a suggester from CSV input and return matching suggestions."""
+    """Build a suggester from CSV and apply the configured cutoff tie policy."""
     csv_path = tmp_path / "responses.csv"
     df = pd.DataFrame(
         {
@@ -160,11 +160,13 @@ def test_from_csv_builds_and_suggests(tmp_path, small_corpus):
         display_text_col="display",
         retrievers=[PrefixRetrieverSpec()],
         min_chars=3,
-        max_suggestions=10,
+        max_suggestions=2,
+        include_tied_suggestions=True,
         weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     )
 
     assert suggester.suggest("car")[0].startswith("Car")
+    assert len(suggester.suggest("car")) == 4
 
 
 def test_from_csv_uses_search_column_as_default_display(tmp_path, small_corpus):
@@ -221,7 +223,9 @@ def test_from_artifact_restores_prefix_suggester(
     artifact_dir = SAYTBuilder(
         small_corpus,
         retrievers=[PrefixRetrieverSpec()],
-        max_suggestions=5,
+        min_chars=3,
+        max_suggestions=2,
+        include_tied_suggestions=True,
         weights=WeightSpecs(specs=[PrefixWeightSpec(weights=prefix_weights)]),
     ).build_artifact(tmp_path / "artifact")
 
@@ -229,7 +233,9 @@ def test_from_artifact_restores_prefix_suggester(
     expected = SAYTSuggester(
         small_corpus,
         retrievers=[PrefixRetrieverSpec()],
-        max_suggestions=5,
+        min_chars=3,
+        max_suggestions=2,
+        include_tied_suggestions=True,
         weights=WeightSpecs(specs=[PrefixWeightSpec(weights=prefix_weights)]),
     )
     restored_config = restored.get_config()
@@ -259,6 +265,62 @@ def test_from_artifact_restores_prefix_suggester(
     assert expected_config.artifact_provenance is None
 
 
+@pytest.mark.parametrize(
+    ("include_tied_suggestions", "default_count", "override_count"),
+    [(True, 4, 2), (False, 2, 4)],
+)
+def test_from_artifact_preserves_tie_policy(
+    tmp_path, small_corpus, include_tied_suggestions, default_count, override_count
+):
+    """Restore the tie policy and allow overrides without changing its default."""
+    artifact_dir = SAYTBuilder(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+        min_chars=3,
+        max_suggestions=2,
+        include_tied_suggestions=include_tied_suggestions,
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    ).build_artifact(tmp_path / "artifact")
+
+    restored = SAYTSuggester.from_artifact(artifact_dir)
+
+    assert (
+        restored.get_config().settings.include_tied_suggestions
+        is include_tied_suggestions
+    )
+    assert len(restored.suggest("car")) == default_count
+    assert (
+        len(
+            restored.suggest(
+                "car", include_tied_suggestions=not include_tied_suggestions
+            )
+        )
+        == override_count
+    )
+    assert len(restored.suggest("car")) == default_count
+
+
+def test_from_legacy_artifact_preserves_cutoff_ties(tmp_path, small_corpus):
+    """Keep tie-inclusive behaviour for artifacts without the new setting."""
+    artifact_dir = SAYTBuilder(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+        min_chars=3,
+        max_suggestions=1,
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    ).build_artifact(tmp_path / "artifact")
+    manifest_path = artifact_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["include_tied_suggestions"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    restored = SAYTSuggester.from_artifact(artifact_dir)
+
+    assert len(restored.suggest("car")) == 4
+    assert restored.suggest("car", include_tied_suggestions=False) == ["Car Waxing"]
+    assert restored.get_config().settings.include_tied_suggestions is True
+
+
 def test_from_artifact_rejects_manifest_corpus_size_mismatch(tmp_path, small_corpus):
     """Reject artifacts whose manifest corpus size disagrees with stored rows."""
     artifact_dir = SAYTBuilder(
@@ -285,6 +347,7 @@ def test_get_config_returns_rich_runtime_summary(small_corpus):
         small_corpus,
         min_chars=3,
         max_suggestions=5,
+        include_tied_suggestions=True,
         retrievers=[
             PrefixRetrieverSpec(),
             NgramRetrieverSpec(n=4, max_df=1.0),
@@ -301,6 +364,7 @@ def test_get_config_returns_rich_runtime_summary(small_corpus):
     assert config.settings.model_dump() == {
         "min_chars": 3,
         "max_suggestions": 5,
+        "include_tied_suggestions": True,
     }
     assert config.corpus.model_dump() == {
         "size": suggester._corpus.size,
@@ -515,7 +579,7 @@ def test_suggest_returns_empty_for_short_or_non_string_query(small_corpus):
 
 
 def test_suggest_with_scores_defaults_to_config_max_suggestions(small_corpus):
-    """Use the configured max_suggestions, but keep ties at the cutoff."""
+    """Use the configured max_suggestions as a strict limit by default."""
     suggester = SAYTSuggester(
         small_corpus,
         min_chars=3,
@@ -526,16 +590,14 @@ def test_suggest_with_scores_defaults_to_config_max_suggestions(small_corpus):
 
     results = suggester.suggest_with_scores("car")
 
-    assert {result.display_text for result in results} == {
+    assert [result.display_text for result in results] == [
         "Car Waxing",
         "Car Wash",
-        "CAR WASH (duplicate)",
-        "Carpentry services",
-    }
+    ]
 
 
 def test_suggest_respects_explicit_num_suggestions(small_corpus):
-    """Allow callers to override the configured limit, while keeping ties."""
+    """Use an explicit suggestion count as a strict limit by default."""
     suggester = SAYTSuggester(
         small_corpus,
         min_chars=3,
@@ -544,19 +606,23 @@ def test_suggest_respects_explicit_num_suggestions(small_corpus):
         weights=WeightSpecs(specs=[PrefixWeightSpec()]),
     )
 
-    assert len(suggester.suggest("car", num_suggestions=1)) == 4
+    assert suggester.suggest("car", num_suggestions=1) == ["Car Waxing"]
 
 
 def test_suggest_with_scores_keeps_ties_at_cutoff(prefix_suggester):
     """Keep all tied scored suggestions at the public cutoff."""
-    results = prefix_suggester.suggest_with_scores("car", num_suggestions=1)
+    results = prefix_suggester.suggest_with_scores(
+        "car", num_suggestions=1, include_tied_suggestions=True
+    )
 
     assert len({result.display_text for result in results}) == 4
 
 
 def test_suggest_keeps_ties_at_cutoff(prefix_suggester):
     """Keep all tied display suggestions at the public cutoff."""
-    results = prefix_suggester.suggest("car", num_suggestions=1)
+    results = prefix_suggester.suggest(
+        "car", num_suggestions=1, include_tied_suggestions=True
+    )
 
     assert results == [
         "Car Waxing",
@@ -564,6 +630,142 @@ def test_suggest_keeps_ties_at_cutoff(prefix_suggester):
         "CAR WASH (duplicate)",
         "Carpentry services",
     ]
+
+
+@pytest.mark.parametrize("with_scores", [False, True])
+@pytest.mark.parametrize("num_suggestions", [None, 1])
+@pytest.mark.parametrize("include_tied_suggestions", [None, True, False])
+@pytest.mark.parametrize("configured_include_ties", [False, True])
+def test_suggest_applies_optional_tie_policy(
+    small_corpus,
+    with_scores,
+    num_suggestions,
+    include_tied_suggestions,
+    configured_include_ties,
+):
+    """Apply the tie policy to explicit counts and the configured default."""
+    suggester = SAYTSuggester(
+        small_corpus,
+        min_chars=3,
+        max_suggestions=2,
+        include_tied_suggestions=configured_include_ties,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+    )
+    suggest = suggester.suggest_with_scores if with_scores else suggester.suggest
+
+    results = suggest(
+        "car",
+        num_suggestions=num_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+    display_texts = (
+        [result.display_text for result in results] if with_scores else results
+    )
+    expected = [
+        "Car Waxing",
+        "Car Wash",
+        "CAR WASH (duplicate)",
+        "Carpentry services",
+    ]
+    effective_include_ties = (
+        configured_include_ties
+        if include_tied_suggestions is None
+        else include_tied_suggestions
+    )
+    if not effective_include_ties:
+        expected = expected[: 2 if num_suggestions is None else num_suggestions]
+
+    assert display_texts == expected
+
+
+@pytest.mark.parametrize("with_scores", [False, True])
+@pytest.mark.parametrize("configured_include_ties", [False, True])
+def test_suggest_tie_override_is_query_local(
+    small_corpus, with_scores, configured_include_ties
+):
+    """Overriding ties must not change later requests using the configured policy."""
+    suggester = SAYTSuggester(
+        corpus=small_corpus,
+        min_chars=3,
+        retrievers=[PrefixRetrieverSpec()],
+        weights=WeightSpecs(specs=[PrefixWeightSpec()]),
+        include_tied_suggestions=configured_include_ties,
+    )
+    suggest = suggester.suggest_with_scores if with_scores else suggester.suggest
+
+    override_results = suggest(
+        "car",
+        num_suggestions=1,
+        include_tied_suggestions=not configured_include_ties,
+    )
+    default_results = suggest("car", num_suggestions=1)
+
+    assert len(override_results) == (1 if configured_include_ties else 4)
+    assert len(default_results) == (4 if configured_include_ties else 1)
+
+
+@pytest.mark.parametrize(
+    ("num_suggestions", "include_tied_suggestions", "expected_display_texts"),
+    [
+        (1, False, ["Top"]),
+        (1, True, ["Top"]),
+        (2, False, ["Top", "alpha"]),
+        (2, True, ["Top", "alpha", "Beta"]),
+    ],
+)
+def test_suggest_with_scores_limits_mixed_scores_without_changing_scores(
+    prefix_suggester,
+    monkeypatch,
+    num_suggestions,
+    include_tied_suggestions,
+    expected_display_texts,
+):
+    """Include only cutoff ties while preserving ranked suggestions and scores."""
+    scores = {"Beta": 0.8, "Lower": 0.5, "Top": 1.0, "alpha": 0.8}
+    suggestions = [
+        Suggestion(display_text=text, score=score) for text, score in scores.items()
+    ]
+    monkeypatch.setattr(
+        prefix_suggester,
+        "_collect_retriever_results",
+        lambda *args, **kwargs: [(1.0, suggestions)],
+    )
+
+    results = prefix_suggester.suggest_with_scores(
+        "car",
+        num_suggestions=num_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+
+    assert results == [
+        Suggestion(display_text=text, score=scores[text])
+        for text in expected_display_texts
+    ]
+
+
+@pytest.mark.parametrize("include_tied_suggestions", [False, True])
+@pytest.mark.parametrize("num_suggestions", [-1, 0, 10])
+def test_suggest_with_scores_tie_policy_handles_limit_boundaries(
+    prefix_suggester, num_suggestions, include_tied_suggestions
+):
+    """Return no results for nonpositive limits and all matches for large limits."""
+    results = prefix_suggester.suggest_with_scores(
+        "car",
+        num_suggestions=num_suggestions,
+        include_tied_suggestions=include_tied_suggestions,
+    )
+
+    assert [result.display_text for result in results] == (
+        [
+            "Car Waxing",
+            "Car Wash",
+            "CAR WASH (duplicate)",
+            "Carpentry services",
+        ]
+        if num_suggestions > 0
+        else []
+    )
 
 
 def test_suggest_with_scores_uses_only_supplied_retrievers(small_corpus):

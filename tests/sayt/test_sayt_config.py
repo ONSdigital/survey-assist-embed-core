@@ -81,6 +81,14 @@ def test_runtime_setting_validation(factory, kwargs, exc_type, match):
         factory([("car wash", "Car Wash")], **kwargs)
 
 
+@pytest.mark.parametrize("factory", [SAYTSuggester, SAYTBuilder])
+@pytest.mark.parametrize("value", [None, 0, 1, "false"])
+def test_include_tied_suggestions_rejects_non_boolean_values(factory, value):
+    """Reject non-boolean tie policies instead of coercing their truthiness."""
+    with pytest.raises(TypeError, match="include_tied_suggestions must be a boolean"):
+        factory([("car wash", "Car Wash")], include_tied_suggestions=value)
+
+
 def test_default_retriever_specs_returns_standard_set():
     """Provide the standard prefix, n-gram, and semantic specs."""
     specs = default_retriever_specs()
