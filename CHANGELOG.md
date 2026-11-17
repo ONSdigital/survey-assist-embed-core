@@ -5,16 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-17
+
+### Added
+
+- Added support for query-length-dependent retriever weights through dedicated WeightSpecs class.
+- Added automatic weight normalisation across retrievers, including mixed fixed and query-length-dependent weight configurations.
+- Strict suggestion limits are now applied by default in SAYT suggest functions and SAYTSuggester through the `include_tied_suggestions` parameter.
+
+### Changed
+
+- Refactored SAYT weighting to use the dedicated WeightSpecs class instead of defining weights within retriever specifications, now enforcing a single retriever instance per retriever type.
+- Updated the default SAYT retriever weights to n4_p5_s1 for 3–5 characters and n3_p4_s3 for 6+ characters.
+- Updated the default SAYT `min_chars` to 3 to align with new weight defaults.
+- Updated Vulnerable dependencies
 
 ### Fixed
 
 - Passed the configured device to fastembed's ONNX embedding model while retaining
   automatic device selection when unspecified.
-
-### Changed
-
-- Updated Vulnerable dependencies
+- Updated SAYT suggestions to exclude non-positive scores from DenseVectorIndex, preventing zero or negative-scored suggestions from being returned.
 
 ## [0.2.3] - 2026-07-20
 
