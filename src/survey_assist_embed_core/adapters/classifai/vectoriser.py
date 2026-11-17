@@ -7,6 +7,7 @@ from threading import Lock
 import numpy as np
 from classifai.vectorisers import HuggingFaceVectoriser, VectoriserBase
 from fastembed import TextEmbedding
+from fastembed.common.types import Device
 
 _ONNX_MODEL_CACHE: dict[tuple[str, str | None], TextEmbedding] = {}
 _ONNX_MODEL_CACHE_LOCK = Lock()
@@ -72,7 +73,10 @@ def _get_cached_onnx_model(model: str, *, device: str | None = None) -> TextEmbe
     with _ONNX_MODEL_CACHE_LOCK:
         cached_model = _ONNX_MODEL_CACHE.get(cache_key)
         if cached_model is None:
-            cached_model = TextEmbedding(model_name=model)
+            cached_model = TextEmbedding(
+                model_name=model,
+                cuda=Device(device) if device is not None else Device.AUTO,
+            )
             _ONNX_MODEL_CACHE[cache_key] = cached_model
 
     return cached_model

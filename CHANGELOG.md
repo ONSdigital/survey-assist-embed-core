@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Passed the configured device to fastembed's ONNX embedding model while retaining
+  automatic device selection when unspecified.
+
 ### Changed
 
 - Updated Vulnerable dependencies
