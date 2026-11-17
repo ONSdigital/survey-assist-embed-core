@@ -6,6 +6,7 @@ from collections.abc import Iterable, Sequence
 from survey_assist_embed_core.sayt.core import (
     DEFAULT_MIN_CHARS,
     CleanCorpus,
+    validate_include_tied_suggestions,
     validate_max_suggestions,
     validate_min_chars,
 )
@@ -23,10 +24,11 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
     _corpus: CleanCorpus
     _min_chars: int
     _max_suggestions: int
+    _include_tied_suggestions: bool
     _retriever_specs: tuple[RetrieverSpec, ...]
     _weights: WeightSpecs
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 pylint: disable = R0913
         self,
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
@@ -34,11 +36,15 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         weights: WeightSpecs | None = None,
         min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
+        include_tied_suggestions: bool = False,
     ) -> None:
         """Validate and store the shared corpus-bound SAYT configuration."""
         self._corpus = CleanCorpus.model_validate(corpus)
         self._min_chars = validate_min_chars(min_chars)
         self._max_suggestions = validate_max_suggestions(max_suggestions)
+        self._include_tied_suggestions = validate_include_tied_suggestions(
+            include_tied_suggestions
+        )
         self._retriever_specs = tuple(
             default_retriever_specs() if retrievers is None else retrievers
         )
@@ -56,6 +62,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         retrievers: Sequence[RetrieverSpec] | None = None,
         min_chars: int = 4,
         max_suggestions: int = 10,
+        include_tied_suggestions: bool = False,
         weights: WeightSpecs | None = None,
     ) -> CorpusBoundT:
         """Build a corpus-bound SAYT object from CSV input."""
@@ -67,7 +74,8 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         return cls(
             corpus_rows,
             retrievers=retrievers,
-            weights=weights,
             min_chars=min_chars,
+            weights=weights,
             max_suggestions=max_suggestions,
+            include_tied_suggestions=include_tied_suggestions,
         )
