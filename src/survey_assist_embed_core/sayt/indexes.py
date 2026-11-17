@@ -219,7 +219,11 @@ class DenseVectorIndex:
                 num_suggestions_returned=len(out),
             )
 
-            if len(out) < num_suggestions and num_results < self._num_vectors:
+            if (
+                len(out) < num_suggestions
+                and num_results < self._num_vectors
+                and all(score > 0 for score in scores)
+            ):
                 num_results = min(self._num_vectors, num_results * 2)
             else:
                 return out
