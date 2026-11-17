@@ -264,8 +264,9 @@ def default_weight_specs() -> WeightSpecs:
     """
     return WeightSpecs(
         specs=[
-            PrefixWeightSpec(),
-            NgramWeightSpec(),
-            SemanticWeightSpec(),
+            # Default weights are zero for queries shorter than three characters.
+            PrefixWeightSpec(weights={3: 5.0, 6: 4.0}),
+            NgramWeightSpec(weights={3: 4.0, 6: 3.0}),
+            SemanticWeightSpec(weights={3: 1.0, 6: 3.0}),
         ]
     )
