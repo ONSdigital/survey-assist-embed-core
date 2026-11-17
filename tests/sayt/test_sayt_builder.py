@@ -152,6 +152,23 @@ def test_builder_writes_manifest_and_corpus(tmp_path, small_corpus):
     ]
 
 
+def test_builder_persists_default_min_chars_and_weights(tmp_path, small_corpus):
+    """Persist default settings and all default weight dictionaries in JSON."""
+    artifact_dir = SAYTBuilder(
+        small_corpus,
+        retrievers=[PrefixRetrieverSpec()],
+    ).build_artifact(tmp_path / "artifact")
+
+    manifest = json.loads((artifact_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest["min_chars"] == 3
+    assert manifest["weight_specs"] == [
+        {"retriever_name": "prefix", "weights": {"3": 5.0, "6": 4.0}},
+        {"retriever_name": "ngram", "weights": {"3": 4.0, "6": 3.0}},
+        {"retriever_name": "semantic", "weights": {"3": 1.0, "6": 3.0}},
+    ]
+
+
 def test_builder_persists_query_length_weight_specs(tmp_path, small_corpus):
     """Persist query-length-specific weights in the artifact manifest."""
     artifact_dir = SAYTBuilder(
