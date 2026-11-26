@@ -9,6 +9,7 @@ from survey_assist_embed_core.sayt.core import (
     validate_include_tied_suggestions,
     validate_max_suggestions,
     validate_min_chars,
+    validate_nec_suggestions_score_scale,
 )
 from survey_assist_embed_core.sayt.retriever_specs import (
     RetrieverSpec,
@@ -37,6 +38,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
         include_tied_suggestions: bool = False,
+        nec_suggestions_score_scale: float = 1.0,
     ) -> None:
         """Validate and store the shared corpus-bound SAYT configuration."""
         self._corpus = CleanCorpus.model_validate(corpus)
@@ -49,6 +51,9 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
             default_retriever_specs() if retrievers is None else retrievers
         )
         self._weight_specs = default_weight_specs() if weights is None else weights
+        self._nec_suggestions_score_scale = validate_nec_suggestions_score_scale(
+            nec_suggestions_score_scale
+        )
 
     @classmethod
     def from_csv[  # pylint: disable=too-many-arguments  # noqa: PLR0913
