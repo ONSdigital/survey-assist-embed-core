@@ -27,6 +27,7 @@ from survey_assist_embed_core.sayt.core import (
     SaytWeightSpecsSummary,
     Suggestion,
     _normalise,
+    apply_nec_suggestions_score_scale,
     take_with_ties,
 )
 from survey_assist_embed_core.sayt.retriever_specs import Retriever, RetrieverSpec
@@ -70,6 +71,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
       same score as the last suggestion within the limit. If True, results may
       exceed the requested count (or ``max_suggestions`` when no count is
       supplied). If False, that count is a strict upper limit.
+    - ``nec_suggestions_score_scale``: multiplier for scaling scores of NEC
+      (Not Elsewhere Classified) suggestions in range [0, 1]. A scale of 0
+      removes NEC suggestions; values in (0, 1.0) de-emphasize them.
 
     Examples:
         Basic usage with an in-memory corpus:
@@ -115,6 +119,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
         min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
         include_tied_suggestions: bool = False,
+        nec_suggestions_score_scale: float = 1.0,
     ) -> None:
         """Initialise a suggester for a cleaned response corpus.
 
@@ -130,6 +135,11 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
                 return.
             include_tied_suggestions: Whether to include items tied at the cutoff score,
                 allowing results to exceed ``max_suggestions``. Defaults to False.
+            nec_suggestions_score_scale: Multiplier for scaling scores of NEC
+                (Not Elsewhere Classified) suggestions in range [0, 1].
+                A scale of 0.0 removes NEC suggestions. A scale of 1.0 leaves
+                NEC scores unchanged. Values in (0, 1.0) de-emphasize NEC
+                entries in ranking. Defaults to 1.0.
         """
         super().__init__(
             corpus,
@@ -138,6 +148,7 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             min_chars=min_chars,
             max_suggestions=max_suggestions,
             include_tied_suggestions=include_tied_suggestions,
+            nec_suggestions_score_scale=nec_suggestions_score_scale,
         )
         self._weight_specs.warn_for_retriever_names(
             [spec.name for spec in self._retriever_specs]
@@ -394,14 +405,21 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             weights=weights,
         )
 
-        combined_result = self._combine_suggestions(results_by_kind)
+        combined_suggestions = self._combine_suggestions(results_by_kind)
+
+        combined_results = apply_nec_suggestions_score_scale(
+            combined_suggestions, self._nec_suggestions_score_scale
+        )
+
         ranked_results = take_with_ties(
-            combined_result,
+            combined_results,
             limit=num_suggestions,
             display_text_value_counts=self._corpus.display_text_value_counts,
         )
+
         if include_tied_suggestions is None:
             include_tied_suggestions = self._include_tied_suggestions
+
         return (
             ranked_results
             if include_tied_suggestions

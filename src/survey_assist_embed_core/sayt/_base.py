@@ -1,5 +1,7 @@
 """Shared bootstrap helpers for corpus-bound SAYT classes."""
 
+# pylint: disable=too-few-public-methods, too-many-arguments
+
 import os
 from collections.abc import Iterable, Sequence
 
@@ -9,6 +11,7 @@ from survey_assist_embed_core.sayt.core import (
     validate_include_tied_suggestions,
     validate_max_suggestions,
     validate_min_chars,
+    validate_nec_suggestions_score_scale,
 )
 from survey_assist_embed_core.sayt.retriever_specs import (
     RetrieverSpec,
@@ -18,7 +21,7 @@ from survey_assist_embed_core.sayt.storage import load_corpus_from_csv
 from survey_assist_embed_core.sayt.weight_specs import WeightSpecs, default_weight_specs
 
 
-class BaseCorpusBound:  # pylint: disable=too-few-public-methods
+class BaseCorpusBound:
     """Shared corpus/retriever bootstrap for SAYT runtime classes."""
 
     _corpus: CleanCorpus
@@ -28,7 +31,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
     _retriever_specs: tuple[RetrieverSpec, ...]
     _weights: WeightSpecs
 
-    def __init__(  # noqa: PLR0913 pylint: disable = R0913
+    def __init__(  # noqa: PLR0913
         self,
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
@@ -37,6 +40,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         min_chars: int = DEFAULT_MIN_CHARS,
         max_suggestions: int = 10,
         include_tied_suggestions: bool = False,
+        nec_suggestions_score_scale: float = 1.0,
     ) -> None:
         """Validate and store the shared corpus-bound SAYT configuration."""
         self._corpus = CleanCorpus.model_validate(corpus)
@@ -49,11 +53,12 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
             default_retriever_specs() if retrievers is None else retrievers
         )
         self._weight_specs = default_weight_specs() if weights is None else weights
+        self._nec_suggestions_score_scale = validate_nec_suggestions_score_scale(
+            nec_suggestions_score_scale
+        )
 
     @classmethod
-    def from_csv[  # pylint: disable=too-many-arguments  # noqa: PLR0913
-        CorpusBoundT: "BaseCorpusBound"
-    ](
+    def from_csv[CorpusBoundT: "BaseCorpusBound"](  # noqa: PLR0913
         cls: type[CorpusBoundT],
         file_path: str | os.PathLike,
         *,

@@ -185,6 +185,17 @@ def validate_include_tied_suggestions(value: object) -> bool:
     return value
 
 
+def validate_nec_suggestions_score_scale(value: object) -> float:
+    """Validate that the NEC (Not Elsewhere Classified) suggestions score scale is in [0, 1]."""
+    if not isinstance(value, (int, float)):
+        raise TypeError("nec_suggestions_score_scale must be a number")
+    if value < 0 or value > 1:
+        raise ValueError(
+            "nec_suggestions_score_scale must be between 0 and 1 (inclusive)"
+        )
+    return float(value)
+
+
 class SaytGlobalSettings(BaseModel):
     """Describe suggester-wide runtime settings."""
 
@@ -332,3 +343,58 @@ def take_with_ties(
     while end < len(deduped_items) and float(deduped_items[end].score) == cutoff_score:
         end += 1
     return deduped_items[:end]
+
+
+def is_nec_text(text: str) -> bool:
+    """Check if display text is worded as a "Not Elsewhere Classified" (NEC) entry.
+
+    NEC entries are identified by patterns like "Other" at the start or
+    "n.e.c.", "nec", or "n.e.c" at the end of the text.
+
+    Args:
+        text: The display text to check.
+
+    Returns:
+        True if the text matches NEC patterns, False otherwise.
+    """
+    nec_patterns = [
+        re.compile(r"^other\b", flags=re.IGNORECASE),
+        re.compile(r"\bn\.?e\.?c\.?$", flags=re.IGNORECASE),
+    ]
+    return any(p.search(text.strip()) for p in nec_patterns)
+
+
+def apply_nec_suggestions_score_scale(
+    suggestions: list[Suggestion], scale: float
+) -> list[Suggestion]:
+    """Apply a score multiplier to NEC (Not Elsewhere Classified) suggestions.
+
+    This function scales the scores of suggestions that are identified as NEC
+    entries by the given scale factor, leaving non-NEC suggestions unchanged.
+    When scale is 0, NEC suggestions are removed entirely.
+
+    Args:
+        suggestions: List of Suggestion objects to potentially scale.
+        scale: Multiplier to apply to NEC suggestion scores in range [0, 1].
+            A scale of 1.0 leaves NEC scores unchanged. Values in (0, 1.0)
+            de-emphasize NEC entries in ranking. A scale of 0.0 removes NEC
+            entries from results.
+
+    Returns:
+        A new list of Suggestion objects with NEC scores scaled accordingly.
+        Non-NEC suggestions are returned as-is. When scale is 0, NEC
+        suggestions are excluded from the result.
+    """
+    if scale == 1.0:
+        return suggestions
+    if scale == 0.0:
+        return [s for s in suggestions if not is_nec_text(s.display_text)]
+    scaled_suggestions: list[Suggestion] = []
+    for s in suggestions:
+        if is_nec_text(s.display_text):
+            scaled_suggestions.append(
+                Suggestion(display_text=s.display_text, score=s.score * scale)
+            )
+        else:
+            scaled_suggestions.append(s)
+    return scaled_suggestions
