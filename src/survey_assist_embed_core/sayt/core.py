@@ -186,13 +186,13 @@ def validate_include_tied_suggestions(value: object) -> bool:
 
 
 def validate_nec_suggestions_score_scale(value: object) -> float:
-    """Validate that the NEC (Not Elsewhere Classified) suggestions score
-    scale is a positive number.
-    """
+    """Validate that the NEC (Not Elsewhere Classified) suggestions score scale is between 0 and 1."""
     if not isinstance(value, (int, float)):
         raise TypeError("nec_suggestions_score_scale must be a number")
-    if value <= 0:
-        raise ValueError("nec_suggestions_score_scale must be positive")
+    if value <= 0 or value > 1:
+        raise ValueError(
+            "nec_suggestions_score_scale must be between 0 and 1 (inclusive)"
+        )
     return float(value)
 
 
