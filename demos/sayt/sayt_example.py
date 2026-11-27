@@ -90,6 +90,7 @@ prefix_suggester = SAYTSuggester(
     min_chars=3,
     max_suggestions=2,
     include_tied_suggestions=False,
+    nec_suggestions_score_scale=1.0,
 )
 default_results = prefix_suggester.suggest_with_scores("car")
 override_results = prefix_suggester.suggest_with_scores(
