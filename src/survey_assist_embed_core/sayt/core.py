@@ -186,10 +186,10 @@ def validate_include_tied_suggestions(value: object) -> bool:
 
 
 def validate_nec_suggestions_score_scale(value: object) -> float:
-    """Validate that the NEC (Not Elsewhere Classified) suggestions score scale is in (0, 1]."""
+    """Validate that the NEC (Not Elsewhere Classified) suggestions score scale is in [0, 1]."""
     if not isinstance(value, (int, float)):
         raise TypeError("nec_suggestions_score_scale must be a number")
-    if value <= 0 or value > 1:
+    if value < 0 or value > 1:
         raise ValueError(
             "nec_suggestions_score_scale must be between 0 and 1 (inclusive)"
         )
@@ -371,20 +371,24 @@ def apply_nec_suggestions_score_scale(
 
     This function scales the scores of suggestions that are identified as NEC
     entries by the given scale factor, leaving non-NEC suggestions unchanged.
-    This allows NEC entries to be de-emphasized in ranking.
+    When scale is 0, NEC suggestions are removed entirely.
 
     Args:
         suggestions: List of Suggestion objects to potentially scale.
-        scale: Multiplier to apply to NEC suggestion scores in range (0, 1].
+        scale: Multiplier to apply to NEC suggestion scores in range [0, 1].
             A scale of 1.0 leaves NEC scores unchanged. Values in (0, 1.0)
-            de-emphasize NEC entries in ranking.
+            de-emphasize NEC entries in ranking. A scale of 0.0 removes NEC
+            entries from results.
 
     Returns:
         A new list of Suggestion objects with NEC scores scaled accordingly.
-        Non-NEC suggestions are returned as-is.
+        Non-NEC suggestions are returned as-is. When scale is 0, NEC
+        suggestions are excluded from the result.
     """
     if scale == 1.0:
         return suggestions
+    if scale == 0.0:
+        return [s for s in suggestions if not is_nec_text(s.display_text)]
     scaled_suggestions: list[Suggestion] = []
     for s in suggestions:
         if is_nec_text(s.display_text):
