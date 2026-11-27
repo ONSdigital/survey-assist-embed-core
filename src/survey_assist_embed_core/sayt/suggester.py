@@ -72,8 +72,8 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
       exceed the requested count (or ``max_suggestions`` when no count is
       supplied). If False, that count is a strict upper limit.
     - ``nec_suggestions_score_scale``: multiplier for scaling scores of NEC
-      (Not Elsewhere Classified) suggestions. Values between 0 and 1 (inclusive)
-      de-emphasize or leave unchanged NEC entries in ranking.
+      (Not Elsewhere Classified) suggestions in range (0, 1]. De-emphasizes
+      NEC entries in ranking.
 
     Examples:
         Basic usage with an in-memory corpus:
@@ -136,9 +136,9 @@ class SAYTSuggester(BaseCorpusBound):  # pylint: disable=too-many-instance-attri
             include_tied_suggestions: Whether to include items tied at the cutoff score,
                 allowing results to exceed ``max_suggestions``. Defaults to False.
             nec_suggestions_score_scale: Multiplier for scaling scores of NEC
-                (Not Elsewhere Classified) suggestions. A value of 1.0 leaves
-                scores unchanged. Values < 1.0 de-emphasize NEC entries, while
-                values > 1.0 emphasize them. Defaults to 1.0.
+                (Not Elsewhere Classified) suggestions in range (0, 1].
+                A value of 1.0 leaves NEC scores unchanged. Values in (0, 1.0)
+                de-emphasize NEC entries in ranking. Defaults to 1.0.
         """
         super().__init__(
             corpus,
