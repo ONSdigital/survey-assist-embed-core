@@ -1,5 +1,7 @@
 """Shared bootstrap helpers for corpus-bound SAYT classes."""
 
+# pylint: disable=too-few-public-methods, too-many-arguments
+
 import os
 from collections.abc import Iterable, Sequence
 
@@ -19,7 +21,7 @@ from survey_assist_embed_core.sayt.storage import load_corpus_from_csv
 from survey_assist_embed_core.sayt.weight_specs import WeightSpecs, default_weight_specs
 
 
-class BaseCorpusBound:  # pylint: disable=too-few-public-methods
+class BaseCorpusBound:
     """Shared corpus/retriever bootstrap for SAYT runtime classes."""
 
     _corpus: CleanCorpus
@@ -29,7 +31,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
     _retriever_specs: tuple[RetrieverSpec, ...]
     _weights: WeightSpecs
 
-    def __init__(  # noqa: PLR0913 pylint: disable = R0913
+    def __init__(  # noqa: PLR0913
         self,
         corpus: Iterable[tuple[object, object]] | Iterable[str],
         *,
@@ -56,9 +58,7 @@ class BaseCorpusBound:  # pylint: disable=too-few-public-methods
         )
 
     @classmethod
-    def from_csv[  # pylint: disable=too-many-arguments  # noqa: PLR0913
-        CorpusBoundT: "BaseCorpusBound"
-    ](
+    def from_csv[CorpusBoundT: "BaseCorpusBound"](  # noqa: PLR0913
         cls: type[CorpusBoundT],
         file_path: str | os.PathLike,
         *,
